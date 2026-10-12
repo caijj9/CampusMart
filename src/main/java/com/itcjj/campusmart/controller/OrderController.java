@@ -1,8 +1,11 @@
 package com.itcjj.campusmart.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.itcjj.campusmart.common.Result;
 import com.itcjj.campusmart.dto.OrderCreateDTO;
 import com.itcjj.campusmart.service.OrderService;
+import com.itcjj.campusmart.vo.OrderDetailVO;
+import com.itcjj.campusmart.vo.OrderListVO;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -46,4 +49,24 @@ public class OrderController {
         orderService.cancel(orderId);
         return Result.success("取消订单成功");
     }
+    @GetMapping("/bought")
+    public Result<Page<OrderListVO>> bought(@RequestParam(required = false) Integer status,
+                                            @RequestParam(defaultValue = "1") Integer pageNum,
+                                            @RequestParam(defaultValue = "10") Integer pageSize) {
+        return Result.success(orderService.listBought(status, pageNum, pageSize));
+    }
+
+    @GetMapping("/sold")
+    public Result<Page<OrderListVO>> sold(@RequestParam(required = false) Integer status,
+                                          @RequestParam(defaultValue = "1") Integer pageNum,
+                                          @RequestParam(defaultValue = "10") Integer pageSize) {
+        return Result.success(orderService.listSold(status, pageNum, pageSize));
+    }
+
+    @GetMapping("/{orderId}")
+    public Result<OrderDetailVO> detail(@PathVariable Long orderId) {
+        return Result.success(orderService.getDetail(orderId));
+    }
+
+
 }

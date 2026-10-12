@@ -1,8 +1,14 @@
 package com.itcjj.campusmart.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.itcjj.campusmart.common.CacheKeys;
+import com.itcjj.campusmart.entity.User;
 import com.itcjj.campusmart.enums.OrderStatus;
+import com.itcjj.campusmart.mapper.UserMapper;
+import com.itcjj.campusmart.vo.OrderDetailVO;
+import com.itcjj.campusmart.vo.OrderListVO;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import com.itcjj.campusmart.common.CodeEnum;
@@ -21,9 +27,11 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -37,13 +45,21 @@ public class OrderServiceImpl implements OrderService {
     private ProductMapper productMapper;
     @Autowired
     private StringRedisTemplate redisTemplate;
+    @Autowired
+    private UserMapper userMapper;
 
     // ========== 幂等 Token 相关常量 ==========
-    /** key 前缀 —— 发牌和撕票都用它，保证两边拼出来的 key 一定一致 */
+    /**
+     * key 前缀 —— 发牌和撕票都用它，保证两边拼出来的 key 一定一致
+     */
     private static final String TOKEN_PREFIX = "order:token:";
-    /** 凭证有效期：太短用户还没点完就过期，太长会积一堆废 key */
+    /**
+     * 凭证有效期：太短用户还没点完就过期，太长会积一堆废 key
+     */
     private static final Duration TOKEN_TTL = Duration.ofMinutes(5);
-    /** 存进 Redis 的占位值 —— StringRedisTemplate 存不了 null，我们只关心 key 在不在 */
+    /**
+     * 存进 Redis 的占位值 —— StringRedisTemplate 存不了 null，我们只关心 key 在不在
+     */
     private static final String TOKEN_VALUE = "1";
 
     @Override
@@ -224,8 +240,7 @@ public class OrderServiceImpl implements OrderService {
                     .eq(Order::getId, orderId)
                     .eq(Order::getStatus, OrderStatus.PENDING_PAYMENT.getCode())   // ← 状态再写一遍
                     .set(Order::getStatus, OrderStatus.CANCELLED.getCode()));
-        }
-        else if (order.getStatus() == OrderStatus.PAID.getCode()) {
+        } else if (order.getStatus() == OrderStatus.PAID.getCode()) {
             rows = orderMapper.update(null, new LambdaUpdateWrapper<Order>()
                     .eq(Order::getId, orderId)
                     .eq(Order::getStatus, OrderStatus.PAID.getCode())   // ← 状态再写一遍
@@ -287,4 +302,108 @@ public class OrderServiceImpl implements OrderService {
         log.info("超时订单已关闭 -> orderId={}, buyerId={}", orderId, order.getBuyerId());
     }
 
+    // ==================== 列表 ====================
+
+    @Override
+    public Page<OrderListVO> listBought(Integer status, Integer pageNum, Integer pageSize) {
+        pageNum = (pageNum == null || pageNum < 1) ? 1 : pageNum;
+        pageSize = pageSize == null ? 10 : Math.min(pageSize, 50);
+
+        Page<Order> src = orderMapper.selectPage(new Page<>(pageNum, pageSize),
+                new LambdaQueryWrapper<Order>()
+                        .eq(Order::getBuyerId, UserContext.get().getId())    // 只查我买的
+                        .eq(status != null, Order::getStatus, status)
+                        .orderByDesc(Order::getCreateTime, Order::getId));    // id 兜底
+
+        // 换成 VO 的分页对象 —— total / current / size 要一起搬，否则前端页码会乱
+        Page<OrderListVO> voPage = new Page<>(src.getCurrent(), src.getSize(), src.getTotal());
+        List<OrderListVO> records = new ArrayList<>();
+        for (Order o : src.getRecords()) {
+            OrderListVO vo = new OrderListVO();
+            fill(o, vo);
+            records.add(vo);
+        }
+        voPage.setRecords(records);
+        return voPage;
+    }
+
+    @Override
+    public Page<OrderListVO> listSold(Integer status, Integer pageNum, Integer pageSize) {
+        pageNum = (pageNum == null || pageNum < 1) ? 1 : pageNum;
+        pageSize = pageSize == null ? 10 : Math.min(pageSize, 50);
+
+        Page<Order> src = orderMapper.selectPage(new Page<>(pageNum, pageSize),
+                new LambdaQueryWrapper<Order>()
+                        .eq(Order::getSellerId, UserContext.get().getId())   // ← 只有这一行和上面不同
+                        .eq(status != null, Order::getStatus, status)
+                        .orderByDesc(Order::getCreateTime, Order::getId));
+
+        Page<OrderListVO> voPage = new Page<>(src.getCurrent(), src.getSize(), src.getTotal());
+        List<OrderListVO> records = new ArrayList<>();
+        for (Order o : src.getRecords()) {
+            OrderListVO vo = new OrderListVO();
+            fill(o, vo);
+            records.add(vo);
+        }
+        voPage.setRecords(records);
+        return voPage;
+    }
+
+    // ==================== 详情 ====================
+
+    @Override
+    public OrderDetailVO getDetail(Long orderId) {
+        // ① 查订单
+        Order order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BizException(CodeEnum.ORDER_NOT_FOUND);
+        }
+
+        // ② 权限：买卖双方之一才让看，第三方 403
+        Long uid = UserContext.get().getId();
+        boolean isBuyer = uid.equals(order.getBuyerId());
+        boolean isSeller = uid.equals(order.getSellerId());
+        if (!isBuyer && !isSeller) {
+            log.warn("非交易双方访问订单详情 -> orderId={}, uid={}", orderId, uid);
+            throw new BizException(CodeEnum.NO_PERMISSION);
+        }
+
+        // ③ 基础字段（和列表共用 fill）
+        OrderDetailVO vo = new OrderDetailVO();
+        fill(order, vo);
+
+        // ④ 对方是谁 —— 我是买家就是对方卖家，反之亦然
+        Long counterpartyId = isBuyer ? order.getSellerId() : order.getBuyerId();
+        User counterparty = userMapper.selectById(counterpartyId);
+        if (counterparty != null) {
+            OrderDetailVO.Counterparty cp = new OrderDetailVO.Counterparty();
+            cp.setNickname(counterparty.getNickname());
+            cp.setCampus(counterparty.getCampus());
+            cp.setPhone(counterparty.getPhone());
+            vo.setCounterparty(cp);
+        }
+
+        log.info("查询订单详情 -> orderId={}, 访问者={}", orderId, uid);   // ⚠️ 不记 phone
+        return vo;
+    }
+
+    // ==================== 转换（唯一的一个私有方法） ====================
+
+    /**
+     * Order 的基础字段搬进 VO
+     * 参数类型写父类 OrderListVO —— OrderDetailVO 是它的子类，传进来也能用
+     */
+    private void fill(Order o, OrderListVO vo) {
+        vo.setId(o.getId());
+        vo.setOrderNo(o.getOrderNo());
+        vo.setBuyerId(o.getBuyerId());
+        vo.setSellerId(o.getSellerId());
+        vo.setProductId(o.getProductId());
+        vo.setProductTitle(o.getProductTitle());
+        vo.setProductImages(o.getProductImages());
+        vo.setAmount(o.getAmount());
+        vo.setStatus(o.getStatus());
+        vo.setCreateTime(o.getCreateTime());
+        vo.setUpdateTime(o.getUpdateTime());
+    }
 }

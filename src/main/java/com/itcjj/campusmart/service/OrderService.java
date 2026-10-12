@@ -1,7 +1,10 @@
 package com.itcjj.campusmart.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.itcjj.campusmart.dto.OrderCreateDTO;
 import com.itcjj.campusmart.entity.Order;
+import com.itcjj.campusmart.vo.OrderDetailVO;
+import com.itcjj.campusmart.vo.OrderListVO;
 
 import java.util.List;
 
@@ -23,4 +26,10 @@ public interface OrderService {
     List<Order> findTimeoutOrders();
 
     void closeTimeoutOrder(Long orderId);
+
+    // OrderService
+    Page<OrderListVO> listBought(Integer status, Integer pageNum, Integer pageSize);
+    Page<OrderListVO> listSold(Integer status, Integer pageNum, Integer pageSize);
+    OrderDetailVO getDetail(Long orderId);
+
 }

@@ -412,13 +412,18 @@ WHERE id = ? AND status = 0;
 
 | 状态 | 方法 | 路径 | 说明 | 权限 | 入参 | 出参 |
 |---|---|---|---|---|---|---|
-| ⬜ | GET | `/order/bought` | 我买的 | 需登录 | `status?`、**分页** | `Page<OrderVO>` |
-| ⬜ | GET | `/order/sold` | 我卖的 | 需登录 | `status?`、**分页** | `Page<OrderVO>` |
-| ⬜ | GET | `/order/{orderId}` | 订单详情 | **仅买卖双方** | — | `OrderDetailVO` |
+| ✅ | GET | `/order/bought` | 我买的 | 需登录 | `status?`、**分页** | `Page<OrderListVO>` |
+| ✅ | GET | `/order/sold` | 我卖的 | 需登录 | `status?`、**分页** | `Page<OrderListVO>` |
+| ✅ | GET | `/order/{orderId}` | 订单详情 | **仅买卖双方** | — | `OrderDetailVO`（= `OrderListVO` + `counterparty{nickname, campus, phone}`） |
 
 **排序**：`create_time DESC, id DESC`（§0.4）
 
 **失败行为**：`2006` 订单不存在；`403` 第三方访问。
+
+**隔离方式**：列表靠 `WHERE buyer_id = ?` / `WHERE seller_id = ?`（**查都查不到别人的**，不是查出来再 `if` 过滤）；
+详情靠 `if (既非 buyer 又非 seller) → 403`。
+
+**⚠️ 手机号只出现在 `OrderDetailVO.counterparty.phone`** —— 列表 VO 无此字段，也不进日志。
 
 **交付信息字段来源（见 §3.4）**
 
@@ -676,6 +681,7 @@ user:brief:{id}       →  UserBrief（昵称/头像/校区/评分/评价数） 
 | 交易中保护（D1） | 15 项测试 + `EXPLAIN` 验证索引 | ✅✓ 高 |
 | 超时关闭（D2） | 9 项测试（含"支付 vs 关闭"竞争：订单保持已付款、商品保持已售出） | ✅✓ 高 |
 | 我的发布 + 重新上架 + CAS（D3） | 18 项测试（含 20 线程并发 relist / offline 各只 1 个成功） | ✅✓ 高（**分页排序稳定性仍未单独测**） |
+| 订单列表 + 详情 + VO（D4） | 16 项测试（第三方 403；报文中 `deleted`/`version`/`password`/`tokenVersion` 零泄漏） | ✅✓ 高 |
 | **HTTP 状态码恒为 200** | 4000 次压测失败 0 次（含大量业务错误） | ✅✓ 高（401/403 未单独测） |
 | **时间格式** | — | ⚠️ **未验证** |
 
@@ -689,11 +695,11 @@ user:brief:{id}       →  UserBrief（昵称/头像/校区/评分/评价数） 
 | 用户 | 9 | 2（disable / enable） | 11 |
 | 分类 | 1 | 0 | 1 |
 | 商品 | **11** | 1（admin search） | 12 |
-| 订单 | 6 | 3（bought / sold / detail） | 9 |
+| 订单 | **9** | 0 | 9 |
 | 收藏 | 3 | 0 | 3 |
 | 评价 | 0 | 2（提交 / 查询） | 2 |
-| 管理 | 0 | 1（**product/offline**） | 1 |
-| **合计** | **31** | **9** | **40** |
+| 管理 | 0 | 3（disable / enable / **product/offline**） | 3 |
+| **合计** | **34** | **6** | **40** |
 
 > 另有 **1 处返回类型变更**（`GET /product/{id}`：`Product` → `ProductDetailVO`）
 > 与 **3 处行为改造**（D2 超时关闭 / D8 view_count / D8 搜索质量），**不增加接口数量**。
@@ -708,7 +714,7 @@ user:brief:{id}       →  UserBrief（昵称/头像/校区/评分/评价数） 
 |---|---|---|---|---|
 | A1 | 商品状态类写入改 CAS（`WHERE status = ?`），`assertNotTrading` 仅作前置提示 | D3 | 🔴 高 | ✅ **10.12 完成** |
 | A2 | 商品详情缓存分层：`product:detail` 只存商品本体，卖家信息单独 `user:brief`（TTL 60s） | D6 | 🔴 高 | ⬜ |
-| A3 | 列表接口统一分页（默认 10 / 上限 50 / 时间+id 倒序） | D3、D4、D6、D8 | 🟠 中 | 🟡 **商品侧完成**（`/product/mine` 已验证）；订单/评价/搜索待做 |
+| A3 | 列表接口统一分页（默认 10 / 上限 50 / 时间+id 倒序） | D3、D4、D6、D8 | 🟠 中 | 🟡 **商品侧 + 订单侧完成**（`/product/mine`、`/order/bought`、`/order/sold` 已验证）；评价/搜索待做 |
 | A4 | 搜索参数校验（pageNum ≥ 1、pageSize ≤ 50、keyword 长度）+ 分类存在性校验 | D8 | 🟠 中 | ⬜ |
 | A5 | 管理员下架：`WHERE status IN (0,1)` + 拒绝交易中/已售 + 记 `offline_reason` | D7 | 🟠 中 | ⬜ |
 | A6 | `relist` 用 `WHERE status = 0`（防止绕过平台下架） | D3 | 🔴 高 | ✅ **10.12 完成**（B4：`status=3` 的商品 relist 被拒且库内仍为 3） |

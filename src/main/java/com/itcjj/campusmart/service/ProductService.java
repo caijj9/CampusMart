@@ -26,5 +26,10 @@ public interface ProductService {
     Product getDetail(Long id);
 
     List<Product> getHistory();
+
+    Page<Product> listMine(Integer status, Integer pageNum, Integer pageSize);
+
+    void relist(Long id);
+
 }
 

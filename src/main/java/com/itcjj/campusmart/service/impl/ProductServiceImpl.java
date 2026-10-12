@@ -1,6 +1,7 @@
 package com.itcjj.campusmart.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.itcjj.campusmart.common.CacheKeys;
 import com.itcjj.campusmart.common.CodeEnum;
@@ -81,22 +82,23 @@ public class ProductServiceImpl implements ProductService {
             throw new BizException(CodeEnum.NO_PERMISSION);
         }
         assertNotTrading(dto.getId());
-        Product product = new Product();
-        product.setId(dto.getId());
-        product.setTitle(dto.getTitle());
-        product.setDescription(dto.getDescription());
-        product.setPrice(dto.getPrice());
-        product.setConditionLevel(dto.getConditionLevel());
-        product.setCategoryId(dto.getCategoryId());
-        product.setImages(dto.getImages());
+        Product upd = new Product();
+        upd.setTitle(dto.getTitle());
+        upd.setDescription(dto.getDescription());
+        upd.setPrice(dto.getPrice());
+        upd.setConditionLevel(dto.getConditionLevel());
+        upd.setCategoryId(dto.getCategoryId());
+        upd.setImages(dto.getImages());
+// 注意：不 set 的字段不会被更新（MP 默认只更新非空字段）
 
-        int rows=productMapper.updateById(product);
-        if (rows == 0) {
-            throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);
-        }
+        int rows = productMapper.update(upd, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, dto.getId())
+                .eq(Product::getStatus, 1));        // 只有在售才可编辑
+        if (rows == 0) { throw new BizException(CodeEnum.PRODUCT_STATUS_ERROR); }
+
         //删除缓存
         redisTemplate.delete(CacheKeys.PRODUCT_DETAIL_PREFIX + dto.getId());
-        log.info("商品更新成功 -> 操作人={}, productId={}", UserContext.get().getId(), product.getId());
+        log.info("商品更新成功 -> 操作人={}, productId={}", UserContext.get().getId(), dto.getId());
 
     }
     @Override
@@ -109,16 +111,14 @@ public class ProductServiceImpl implements ProductService {
             throw new BizException(CodeEnum.NO_PERMISSION);
         }
         assertNotTrading(id);
-        Product product = new Product();
-        product.setId(id);
-        product.setStatus(0);
-        int rows=productMapper.updateById(product);
-        if (rows == 0) {
-            throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);
-        }
+        int rows = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, id)
+                .eq(Product::getStatus, 1)          // 只有在售才能下架
+                .set(Product::getStatus, 0));
+        if (rows == 0) { throw new BizException(CodeEnum.PRODUCT_STATUS_ERROR); }
         //删除缓存
         redisTemplate.delete(CacheKeys.PRODUCT_DETAIL_PREFIX + id);
-        log.info("商品下架成功 -> 操作人={}, productId={}", UserContext.get().getId(), product.getId());
+        log.info("商品下架成功 -> 操作人={}, productId={}", UserContext.get().getId(), id);
     }
     @Override
     public void delete(Long id) {
@@ -130,10 +130,11 @@ public class ProductServiceImpl implements ProductService {
             throw new BizException(CodeEnum.NO_PERMISSION);
         }
         assertNotTrading(id);
-        int rows=productMapper.deleteById(id);
-        if (rows == 0) {
-            throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);
-        }
+        int rows = productMapper.delete(new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, id)
+                .in(Product::getStatus, 0, 1));     // 在售 / 卖家下架的才能删
+        if (rows == 0) { throw new BizException(CodeEnum.PRODUCT_STATUS_ERROR); }
+
         //删除缓存
         redisTemplate.delete(CacheKeys.PRODUCT_DETAIL_PREFIX + id);
         log.info("商品删除成功 -> 操作人={}, productId={}", UserContext.get().getId(), id);
@@ -157,7 +158,7 @@ public class ProductServiceImpl implements ProductService {
                 .le(dto.getMaxPrice() != null, Product::getPrice, dto.getMaxPrice())
                 .eq(dto.getConditionLevel() != null, Product::getConditionLevel, dto.getConditionLevel())
                 // ... 其他条件，每个前面挂一个 boolean 开关
-                .and(StringUtils.hasText(dto.getKeyword()), w -> w     // ← 关键字，别忘了括号
+                .and(StringUtils.hasText(dto.getKeyword()), w -> w     // 关键字（或条件需括号包裹）
                         .like(Product::getTitle, dto.getKeyword())
                         .or()
                         .like(Product::getDescription, dto.getKeyword()));
@@ -290,6 +291,42 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+    @Override
+    public Page<Product> listMine(Integer status, Integer pageNum, Integer pageSize) {
+        Long sellerId = UserContext.get().getId();
+        //status可以筛选，分页pageNum默认1，pagesize默认10，上限50
+        pageNum = (pageNum == null || pageNum < 1) ? 1 : pageNum;
+        pageSize = pageSize == null ? 10 : Math.min(pageSize, 50);
+        //排序
+        Page<Product> page = new Page<>(pageNum, pageSize);
+        return productMapper.selectPage(page, new LambdaQueryWrapper<Product>()
+                .eq(Product::getSellerId, sellerId)
+                .eq(status != null, Product::getStatus, status)
+                .orderByDesc(Product::getCreateTime, Product::getId));
+    }
+
+    @Override
+    public void relist(Long id) {
+        Product old = productMapper.selectById(id);
+        if (old == null) {
+            throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);
+        }
+        if (!old.getSellerId().equals(UserContext.get().getId())) {
+            throw new BizException(CodeEnum.NO_PERMISSION);      // 只能救自己的
+        }
+
+        // 只有「卖家下架(0)」能回到在售；平台下架(3) / 已售出(2) / 已在售(1) 都进不来
+        int rows = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, id)
+                .eq(Product::getStatus, 0)
+                .set(Product::getStatus, 1));
+
+        if (rows == 0) {
+            throw new BizException(CodeEnum.PRODUCT_RELIST_NOT_ALLOWED);   // 2013
+        }
+        redisTemplate.delete(CacheKeys.PRODUCT_DETAIL_PREFIX + id);
+        log.info("商品重新上架 -> productId={}", id);
+    }
 
 
 

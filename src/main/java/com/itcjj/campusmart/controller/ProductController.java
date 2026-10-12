@@ -68,5 +68,20 @@ public class ProductController {
         return Result.success(productService.getHistory());
     }
 
+    @GetMapping("/mine")                     // 我发布的
+    public Result<Page<Product>> mine(@RequestParam(required = false) Integer status,
+                                      @RequestParam(defaultValue = "1") Integer pageNum,
+                                      @RequestParam(defaultValue = "10") Integer pageSize){
+        return Result.success(productService.listMine(status, pageNum, pageSize));
+    }
+
+
+    @PutMapping("/relist/{id}")              // 重新上架
+    public Result<Void> relist(@PathVariable Long id){
+        productService.relist(id);
+        return Result.success(null);
+    }
+
+
 
 }

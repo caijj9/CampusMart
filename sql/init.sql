@@ -155,3 +155,28 @@ CREATE TABLE IF NOT EXISTS `favorite`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
     COMMENT = '商品收藏表';
+
+-- 交易评价表（买家评卖家，一个订单只能评一次）
+-- ⚠️ 刻意不加 deleted 列：本版没有"删除评价"这个操作；
+--    且逻辑删除会与 uk_order_id 冲突（软删的记录仍占用唯一键，重插会报错）
+CREATE TABLE IF NOT EXISTS `review`
+(
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '评价ID',
+    `order_id`    BIGINT       NOT NULL COMMENT '订单ID -> orders.id',
+    `buyer_id`    BIGINT       NOT NULL COMMENT '评价人（买家）-> user.id',
+    `seller_id`   BIGINT       NOT NULL COMMENT '被评人（卖家）-> user.id',
+    `rating`      TINYINT      NOT NULL COMMENT '评分 1~5',
+    `content`     VARCHAR(500) DEFAULT NULL COMMENT '评价内容，可空',
+
+    `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_order_id` (`order_id`)
+        COMMENT '一个订单只能评价一次（数据库兜底，防并发重复）',
+    KEY `idx_seller_id` (`seller_id`)
+        COMMENT 'D6 按卖家查评价列表 / 算平均分'
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+    COMMENT = '交易评价表（买家评卖家）';

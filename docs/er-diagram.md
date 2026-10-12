@@ -7,11 +7,11 @@ erDiagram
     USER ||--o{ PRODUCT   : "发布"
     USER ||--o{ ORDER     : "买家下单 / 卖家接单"
     USER ||--o{ FAVORITE  : "收藏"
-    USER ||--o{ REVIEW    : "评价"
+    USER ||--o{ REVIEW    : "买家评价卖家"
     CATEGORY ||--o{ PRODUCT : "归类"
     PRODUCT  ||--o{ ORDER    : "被购买"
     PRODUCT  ||--o{ FAVORITE : "被收藏"
-    PRODUCT  ||--o{ REVIEW   : "被评价"
+    ORDER    ||--o| REVIEW   : "一单一次评价"
 
     USER {
         bigint   id          PK "用户ID"
@@ -79,12 +79,13 @@ erDiagram
 
     REVIEW {
         bigint   id          PK "评价ID"
-        bigint   order_id    FK "订单ID -> order.id"
-        bigint   product_id  FK "商品ID -> product.id"
-        bigint   user_id     FK "评价人ID -> user.id"
-        tinyint  rating         "评分 1-5"
-        varchar  content        "评价内容"
+        bigint   order_id    FK "订单ID -> orders.id（UNIQUE：一个订单只能评一次）"
+        bigint   buyer_id    FK "评价人（买家）-> user.id"
+        bigint   seller_id   FK "被评人（卖家）-> user.id"
+        tinyint  rating         "评分 1~5"
+        varchar  content        "评价内容，可空（最多 500 字）"
         datetime create_time    "创建时间"
+        datetime update_time    "更新时间"
     }
 ```
 
@@ -98,6 +99,9 @@ erDiagram
 | 订单建模 | **不建 `order_item` 明细表**，商品标题/图片/金额快照直接内联在 `orders` | 校园二手每件商品都是孤品（一单一品），没有购物车、不会一次买多件 → 明细表是多余的 |
 | 订单快照 | 订单存下单时的 `product_title` / `product_images` / `amount` | 商品改价/改名/删图后，**历史订单必须还能还原当时的事实**（订单是凭证） |
 | 「库存」 | **不设 `stock` 字段** —— 校园二手每件都是孤品，没有"数量"这回事 | 防超卖 = 下单时把 `product.status` 从 `1在售` 改成 `2已售出`（配合乐观锁 `version`，Day3 加） |
+| **评价建模** | **不设 `product_id`** —— 评价挂「**人**」不挂「商品」（`buyer_id` 评 `seller_id`） | 每件商品只卖一次，单看某个商品没有"口碑"可言；但**卖家会交易很多单**，评价累积在「卖家」身上才有意义（信用分） |
+| **评价唯一性** | `UNIQUE(order_id)` —— 一个订单只能评一次 | 「一单一次」是业务规则，必须在**数据库层**保证：`selectCount` 先查只能给友好提示，**挡不住并发**（两个请求可能同时通过检查） |
+| **评价表不加 `deleted`** | **刻意不建逻辑删除列** | 本版没有"删除评价"这个操作；且软删的记录仍占用 `uk_order_id`，会让"同一订单再评价"永久失败（同 `favorite` 的处理） |
 | 索引规划 | `user.username` 唯一索引；`product(seller_id)`、`product(category_id)`、`order(buyer_id)`、`favorite(user_id, product_id)` 联合唯一 | 按查询路径建索引 |
 
 ## 后续待办（写代码时再补）

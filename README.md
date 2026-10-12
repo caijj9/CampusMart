@@ -122,11 +122,11 @@ erDiagram
     USER ||--o{ PRODUCT  : "发布"
     USER ||--o{ ORDERS   : "买家下单 / 卖家接单"
     USER ||--o{ FAVORITE : "收藏"
-    USER ||--o{ REVIEW   : "评价"
+    USER ||--o{ REVIEW   : "买家评价卖家"
     CATEGORY ||--o{ PRODUCT : "归类"
     PRODUCT  ||--o{ ORDERS   : "被购买"
     PRODUCT  ||--o{ FAVORITE : "被收藏"
-    PRODUCT  ||--o{ REVIEW   : "被评价"
+    ORDERS   ||--o| REVIEW   : "一单一次评价"
 ```
 
 > - 完整字段定义（字段、类型、注释、索引规划）见 [`docs/er-diagram.md`](docs/er-diagram.md)

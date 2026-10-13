@@ -715,3 +715,70 @@ GET  /user/list                → ApiResult<User[]>（注意：返回的是实�
 - [ ] 普通用户手动访问 `/admin` → 被挡住（不是只隐藏入口）
 - [ ] `npm run build` 零报错
 
+---
+
+## 14. 第 10 轮（10.13 追加）：管理端「强制下架」+ 商品详情显示下架原因
+
+**背景**：后端 D7 第三步已完成（**已实测**）——
+`PUT /admin/product/offline/{id}` 可用，`ProductDetailVO` 多了 `offlineReason`。
+第 9 轮里说的「本轮不做强制下架」现在可以做了。
+
+**已实测的后端返回：**
+
+```
+PUT /admin/product/offline/61     body: {"reason":"违规商品-测试下架"}
+→ {"code":0,"data":null,"msg":"ok"}
+
+失败情况（按 code 区分，别统一显示"操作失败"）：
+{"code":400, "msg":"下架原因不能为空"}
+{"code":2001,"msg":"商品不存在"}
+{"code":2014,"msg":"商品已售出，不能下架"}
+{"code":2010,"msg":"商品正在交易中"}
+{"code":2003,"msg":"商品已售出或已下架"}      ← 兜底（已平台下架 3）
+{"code":403, "msg":"无权限访问"}
+
+GET /product/{id} 的 data 里新增 offlineReason（仅 status=3 时非 null）
+```
+
+⚠️ **三个必须遵守的点**
+
+1. **只在 `status` 为 `0` 或 `1` 时才允许点「强制下架」** ——
+   `2 已售出` / `3 已平台下架` 都要**置灰不可点**（后端也会拒，但前端别让人白点）
+2. 后端拒了要**按 code 显示对应人话**（2014/2010/2003 三句都不一样），
+   不要统一弹「操作失败」——管理员需要知道到底为什么
+3. `ProductDetailVO` 多的 `offlineReason` 只在 `status === 3` 时有值，其余是 `null`
+
+**提示词（直接粘给 Codex）：**
+
+```
+读 AGENTS.md。后端补了两个能力：管理端强制下架、商品详情带下架原因。现在接上。
+
+接口（已实测确认）：
+PUT /admin/product/offline/{id}  body: {"reason": string}   → ApiResult<null>
+GET /product/{id}  → ProductDetail 多了一个 offlineReason: string | null（仅 status=3 时非 null）
+
+任务：
+1. src/types/admin.ts 加 OfflineReasonBody = { reason: string }。
+2. src/api/admin.ts 加 offlineProduct(id, reason)
+   → client.put(`/admin/product/offline/${id}`, { reason })，返回 data.data，signal 不必传（是写操作）。
+3. AdminPage 的「商品管理」表格每行加一个「强制下架」按钮：
+   - ⚠️ 只在 status === 0 或 status === 1 时启用；2 已售出 / 3 已平台下架 一律 disabled
+   - 点击弹对话框：必填「下架原因」多行文本（最多 200 字，前端也校验）+ 取消 / 确认
+   - 成功后关闭对话框 + toast 成功 + 刷新列表
+   - 失败时按 code 显示对应提示：400 原因不能为空 / 2014 该商品已售出，不能下架 /
+     2010 该商品正在交易中，无法下架 / 2003 该商品当前状态不允许下架 / 其他用通用提示
+4. src/types/product.ts：ProductDetail 加 offlineReason: string | null。
+5. ProductDetailPage：当 status === 3 时，在商品信息上方显示一条醒目的提示条：
+   「该商品已被平台下架」，若 offlineReason 不为 null 则附带原因：
+   「该商品已被平台下架：{offlineReason}」
+6. 跑 npm run build 确保零 TypeScript 错误。
+```
+
+**验收**
+
+- [ ] 管理端对「在售」「卖家下架」商品 → 下架成功，列表里状态变「平台下架」并显示原因
+- [ ] 对「已售出」「已平台下架」商品 → 按钮**置灰不可点**
+- [ ] 下架原因留空 → 提交被拦
+- [ ] 打开一个 `status=3` 的商品详情（例如商品 44「D3-平台下架模拟」）→ 看到下架提示条
+- [ ] `npm run build` 零报错
+

@@ -486,3 +486,146 @@ GET /order/38
 **验收**：登录后打开「我的订单」→ 显示订单卡片（不是"待接入"）；点进详情 → 显示商品快照 +
 状态 + **对方昵称/校区/手机号**；切「我卖的」页签也正常。
 
+---
+
+## 11. 第 7 轮（10.13 追加）：卖家评价展示
+
+**背景**：后端 D6 任务① 已完成 —— `GET /review/seller/{sellerId}` **可用且已实测**。
+之前只做了「提交评价」（`ReviewButton`），**没有任何地方能看到评价**，所以「商家看不到评价」。
+
+**已实测的后端返回（与实际报文一字不差）：**
+
+```
+GET /review/seller/29?pageNum=1&pageSize=3
+→ {"code":0,"data":{
+     "avgRating":4.67,
+     "page":{"current":1,"pages":1,"size":3,"total":3,"records":[
+        {"id":3,"rating":5,"content":"并发 5","createTime":"2026-10-12T23:58:30"},
+        {"id":2,"rating":4,"content":null,"createTime":"2026-10-12T23:58:30"},
+        {"id":1,"rating":5,"content":"发货很快，东西和描述一致","createTime":"2026-10-12T23:58:27"}]},
+     "reviewCount":3}}
+
+GET /review/seller/30（这个卖家一条评价都没有）
+→ {"code":0,"data":{
+     "avgRating":null,
+     "page":{"current":1,"pages":0,"size":10,"total":0,"records":[]},
+     "reviewCount":0}}
+```
+
+⚠️ **三个必须遵守的点**
+
+1. `avgRating` 为 `null` 表示**没人评价过**，**不是 0 分** → 显示「暂无评价」，
+   **绝对不要写 `avgRating ?? 0`**（会把"没人评"显示成"0 分"，是业务错误）
+2. `content` 可能为 `null`（提交时是选填）→ **不渲染内容行**，别显示字面的 "null"
+3. 分页对象挂在 `data.page` 里，**不是** `records` 直接挂在 `data` 上：
+   取 `data.page.records` / `data.page.total` / `data.avgRating` / `data.reviewCount`
+
+**提示词（直接粘给 Codex）：**
+
+```
+读 AGENTS.md。后端新增了卖家评价查询接口（已实测确认），现在做「卖家评价」展示。
+
+接口（本轮唯一新增）：
+GET /review/seller/{sellerId}?pageNum=1&pageSize=10
+→ ApiResult<SellerReviews>
+   SellerReviews = { page: Page<ReviewItem>, avgRating: number | null, reviewCount: number }
+   ReviewItem    = { id: number, rating: number, content: string | null, createTime: string }
+
+任务：
+1. src/types/review.ts 补 ReviewItem / SellerReviews 两个类型。
+   Page<T> 从 '@/types' 复用，不要重新定义。
+2. src/api/review.ts 加 getSellerReviews(sellerId, params, signal)
+   → client.get(`/review/seller/${sellerId}`, { params, signal })，返回 data.data，
+     signal 必须传下去（页面用 TanStack Query 的 AbortSignal）。
+3. 新建 src/pages/SellerReviewsPage.tsx，路由 /sellers/:id：
+   - 顶部卡片：平均分大字（保留 1 位小数）+ 星级（lucide Star）+ 「N 条评价」
+   - ⚠️ avgRating === null 时显示「暂无评价」，隐藏分数 —— 不要显示 0.0
+   - 评价列表：每条显示 星级 + 内容 + 时间；content 为 null 时不渲染内容行
+     时间复用 @/lib/orderState 的 formatOrderTime
+   - 分页风格与订单列表保持一致，pageNum 从 1 开始
+   - 三种状态都要有：加载中 / 出错（可重试）/ 空列表（「还没有人评价过」）
+4. src/App.tsx 加路由：/sellers/:id → SellerReviewsPage（放在 ProtectedRoute 里面）
+5. 入口：src/pages/ProductDetailPage.tsx 的卖家信息区加一个「查看卖家评价」链接
+   → /sellers/{product.sellerId}（后端商品详情已经返回 sellerId）
+6. 顺手更新 AGENTS.md 顶部的接口清单：把 /review/seller/{sellerId}
+   从「尚未实现」挪到「现在就能用」。
+7. 跑 npm run build 确保零 TypeScript 错误；再跑 npm run check:review。
+
+本轮先不做：评价页展示卖家昵称/头像/校区 —— 后端商品详情的内联卖家信息
+（ProductDetailVO）还没做，下一轮再接。
+```
+
+**验收**
+
+- [ ] 打开 `/sellers/29` → 显示 4.7 分、星级、3 条评价（含时间）
+- [ ] 打开 `/sellers/30` → 显示「暂无评价」，**页面上不出现 0.0 分**
+- [ ] rating=4 那条（content 为空）→ **不显示内容行**，也不显示 "null"
+- [ ] 从商品详情页能点「查看卖家评价」跳转过去
+- [ ] `npm run build` 零报错
+
+---
+
+## 12. 第 8 轮（10.13 追加）：商品详情页显示卖家信息
+
+**背景**：后端 D6 任务③ 已完成 —— `GET /product/{id}` 的返回类型从 `Product` 换成了
+**`ProductDetailVO`**（**已实测**），内联了卖家公开信息。前端终于能显示「**谁在卖、信誉几分**」。
+
+**已实测的后端返回（与实际报文一字不差）：**
+
+```
+GET /product/61
+→ {"code":0,"data":{
+     "id":61,"sellerId":29,"categoryId":6,"title":"E2E-图片链路验证","description":"证明有图就能显示",
+     "price":9.90,"status":1,"conditionLevel":2,"images":"/upload/product/5dc9...png",
+     "createTime":"2026-10-13T00:29:53","updateTime":"2026-10-13T00:30:25",
+     "seller":{"nickname":"E2E卖家","avatar":null,"campus":"东校区","avgRating":4.67,"reviewCount":3}}}
+```
+
+⚠️ **四个必须遵守的点**
+
+1. `seller.avgRating` 为 `null` = **卖家还没被评价过** → 显示「暂无评价」，
+   **绝对不要 `?? 0`**（会把"没人评"显示成"0 分"）
+2. `seller.avatar` / `nickname` / `campus` 都可能为 `null` → 头像用图标兜底，文字用「暂未填写」
+3. **`deleted` / `version` 已经从详情报文里去掉了** —— 不要再依赖它们
+4. ⚠️ **只有 `/product/{id}` 换了返回类型**：`/product/list` 和 `/product/search`
+   **仍然返回老的 `Product` 实体**（后端还没改）→ **不要动 `src/types/product.ts` 里已有的 `Product`**
+
+**提示词（直接粘给 Codex）：**
+
+```
+读 AGENTS.md。后端商品详情接口改了：GET /product/{id} 的返回类型从 Product 换成 ProductDetailVO，
+多了一个 seller 字段（卖家公开信息）。现在把商品详情页的「卖家」区做出来。
+
+已实测的后端返回（字段名一字不差）：
+GET /product/{id}
+→ ApiResult<ProductDetail>
+   ProductDetail = Product + { seller: SellerBrief }
+   SellerBrief   = { nickname: string | null, avatar: string | null, campus: string | null,
+                     avgRating: number | null, reviewCount: number }
+
+任务：
+1. src/types/product.ts：
+   - ⚠️ 不要改动已有的 Product 类型（/product/list、/product/search 仍在用它，结构没变）
+   - 新增 SellerBrief，以及 ProductDetail = Product & { seller: SellerBrief }
+   - 把 getProductDetail 的返回类型从 Product 改成 ProductDetail（api/product.ts 里一起改）
+2. src/pages/ProductDetailPage.tsx：在商品信息下方加一个「卖家」卡片：
+   - 头像（avatar 为 null 时用 lucide 的 User 图标占位）+ 昵称（null 显示「暂未填写」）
+     + 校区（null 显示「暂未填写」）
+   - 评分：星级（lucide Star）+ 数字（保留 1 位小数）
+   - ⚠️ avgRating === null 时显示「暂无评价」，隐藏星级和分数 —— 绝不要显示 0.0
+   - 「N 条评价」+「查看全部评价」链接 → /sellers/{sellerId}（第 7 轮已建好这个路由）
+   - 视觉风格与商品详情页其他卡片保持一致
+3. 跑 npm run build 确保零 TypeScript 错误。
+4. 顺手把 AGENTS.md 顶部接口清单里 /product/{id} 的说明改成
+   「返回 ProductDetailVO（含 seller）」。
+
+本轮不做：/product/list 和 /product/search 的返回结构后端还没改，不要动它们。
+```
+
+**验收**
+
+- [ ] 打开任意商品详情 → 能看到卖家头像/昵称/校区/评分/评价数
+- [ ] 卖家没有评价时（例如商品 5 / 卖家 28）→ 显示「暂无评价」，**不出现 0.0**
+- [ ] 点「查看全部评价」→ 跳到 `/sellers/{sellerId}`
+- [ ] `npm run build` 零报错
+

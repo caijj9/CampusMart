@@ -1,6 +1,7 @@
 package com.itcjj.campusmart.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.itcjj.campusmart.common.CodeEnum;
 import com.itcjj.campusmart.common.CurrentUser;
 import com.itcjj.campusmart.dto.LoginDTO;
@@ -109,6 +110,8 @@ public class UserServiceImpl implements UserService {
         if (user == null || !passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
             throw new BizException(CodeEnum.LOGIN_FAILED);
         }
+        if(user.getStatus() == 0){
+            throw new BizException(CodeEnum.USER_DISABLED);}
 
 
         // 登录成功记一笔（安全审计：谁、什么时候登录过）
@@ -161,7 +164,35 @@ public class UserServiceImpl implements UserService {
         log.info("用户上传头像 -> id={}, url={}", userId, url);
         return url;
     }
+    @Override
+    public void disableUser(Long id) {
+        // 一条 UPDATE 干两件事：状态置 0 + token_version 自增
+        // setSql 是「原样拼进 SQL」，所以 +1 是数据库算的，不是 Java 算的（避免并发丢更新）
+        UpdateWrapper<User> w = new UpdateWrapper<User>()
+                .eq("id", id)
+                .set("status", 0)
+                .setSql("token_version = token_version + 1");
 
+        int rows = userMapper.update(null, w);   // 条件全在 wrapper 里，第一个参数传 null
+        if (rows == 0) {
+            throw new BizException(CodeEnum.USER_NOT_FOUND);   // 1002
+        }
+        log.info("用户禁用 -> id={}", id);
+    }
+
+    @Override
+    public void enableUser(Long id) {
+        // 启用只改状态 —— 不要动 token_version（旧 token 已经作废了，不用再作废一次）
+        UpdateWrapper<User> w = new UpdateWrapper<User>()
+                .eq("id", id)
+                .set("status", 1);
+
+        int rows = userMapper.update(null, w);
+        if (rows == 0) {
+            throw new BizException(CodeEnum.USER_NOT_FOUND);
+        }
+        log.info("用户启用 -> id={}", id);
+    }
 
 
 }

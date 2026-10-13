@@ -17,5 +17,7 @@ public interface UserService{
     User getCurrentUser();
     void updatePassword(PasswordDTO dto);
     String uploadAvatar(MultipartFile file);
+    void disableUser(Long id) ;
+    void enableUser(Long id);
 
 }

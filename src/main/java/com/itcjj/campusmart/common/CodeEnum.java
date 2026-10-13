@@ -28,6 +28,7 @@ public enum CodeEnum {
     PRODUCT_RELIST_NOT_ALLOWED(2013, "商品当前状态不允许重新上架"),
     ORDER_NOT_COMPLETED(2011, "订单未完成"),
     ALREADY_REVIEWED(2012, "已评价"),
+    USER_DISABLED(2015, "用户已禁用"),
 
 
 

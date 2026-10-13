@@ -15,6 +15,9 @@ public class Product {
     private Long id;
     @Version
     private Integer version;
+    // 平台下架：卖家下架是 status=0，平台下架是 status=3 —— 这两列只在平台下架时有值
+    private String offlineReason;
+    private LocalDateTime offlineTime;
     private Long sellerId;
     private Long categoryId;
     private String title;

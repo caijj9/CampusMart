@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS `product`
     `images`          VARCHAR(1000) COMMENT '图片URL，逗号分隔，最多9张',
     `version`         INT           NOT NULL DEFAULT 0 COMMENT '乐观锁版本号：下单时防止超卖',
 
+    -- 平台下架（管理员操作）：卖家下架是 status=0，平台下架是 status=3
+    -- ⚠️ 只加字段就用这两列，别写成 ALTER（init.sql 必须能反复执行）
+    `offline_reason`  VARCHAR(200)  DEFAULT NULL COMMENT '平台下架原因（管理员填写，仅 status=3 时有值）',
+    `offline_time`    DATETIME      DEFAULT NULL COMMENT '平台下架时间',
+
 PRIMARY KEY (`id`),
     -- 「你打算用它当查询条件，就给它建索引」：按卖家查「我的商品」、按分类筛选商品
     KEY `idx_seller_id` (`seller_id`),

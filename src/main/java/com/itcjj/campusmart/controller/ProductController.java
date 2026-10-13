@@ -6,6 +6,7 @@ import com.itcjj.campusmart.dto.ProductSearchDTO;
 import com.itcjj.campusmart.dto.ProductUpdateDTO;
 import com.itcjj.campusmart.entity.Product;
 import com.itcjj.campusmart.service.ProductService;
+import com.itcjj.campusmart.vo.ProductDetailVO;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -58,7 +59,7 @@ public class ProductController {
 
     // 商品详情（带 Redis 缓存）
     @GetMapping("/{id}")
-    public Result<Product> detail(@PathVariable Long id) {
+    public Result<ProductDetailVO> detail(@PathVariable Long id) {
         return Result.success(productService.getDetail(id));
     }
 

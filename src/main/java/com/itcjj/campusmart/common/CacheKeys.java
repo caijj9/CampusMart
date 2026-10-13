@@ -31,4 +31,6 @@ public final class CacheKeys {          // final：不允许被继承（它只�
     /** 一次最多处理多少条 —— 防止积压时一口气全捞出来 */
     public static final int BATCH_LIMIT = 100;
 
+    public static final String USER_BRIEF_PREFIX = "user:brief:";
+    public static final Duration USER_BRIEF_TTL = Duration.ofSeconds(60);
 }

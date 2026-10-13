@@ -10,12 +10,18 @@ import com.itcjj.campusmart.dto.ProductSearchDTO;
 import com.itcjj.campusmart.dto.ProductUpdateDTO;
 import com.itcjj.campusmart.entity.Order;
 import com.itcjj.campusmart.entity.Product;
+import com.itcjj.campusmart.entity.Review;
+import com.itcjj.campusmart.entity.User;
 import com.itcjj.campusmart.enums.OrderStatus;
 import com.itcjj.campusmart.exception.BizException;
 import com.itcjj.campusmart.mapper.OrderMapper;
 import com.itcjj.campusmart.mapper.ProductMapper;
+import com.itcjj.campusmart.mapper.ReviewMapper;
+import com.itcjj.campusmart.mapper.UserMapper;
 import com.itcjj.campusmart.service.ProductService;
 import com.itcjj.campusmart.util.UserContext;
+import com.itcjj.campusmart.vo.ProductDetailVO;
+import com.itcjj.campusmart.vo.SellerBriefVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -196,49 +202,78 @@ public class ProductServiceImpl implements ProductService {
     }
 
 
+    @Autowired
+    private UserMapper userMapper;
+    @Autowired
+    private ReviewMapper reviewMapper;
     @Override
-    public Product getDetail(Long id) {
-        // ---------- 第 0 步：记浏览历史（必须放在查缓存之前！） ----------
-        recordHistory(id);
+    public ProductDetailVO getDetail(Long id) {
+            // 第 0 步：记浏览历史（不变）
+            recordHistory(id);
 
-        // 拼出这个商品的缓存 key，例如 "product:detail:7"
-        String cacheKey = CacheKeys.PRODUCT_DETAIL_PREFIX + id;
+            String cacheKey = CacheKeys.PRODUCT_DETAIL_PREFIX + id;
+            String cached = redisTemplate.opsForValue().get(cacheKey);
 
-        // ---------- 第 1 步：先问 Redis，看有没有缓存 ----------
-        String cached = redisTemplate.opsForValue().get(cacheKey);
+            // ⭐ 关键改动：三岔路不再各自 return，而是把结果统一交给 product 变量
+            Product product;
+            if (StringUtils.hasText(cached)) {
+                product = objectMapper.readValue(cached, Product.class);          // 情况 A：命中
+            } else if (cached != null) {
+                throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);               // 情况 B：空值标记
+            } else {
+                product = productMapper.selectById(id);                          // 情况 C：回源
+                if (product != null) {
+                    redisTemplate.opsForValue().set(cacheKey,
+                            objectMapper.writeValueAsString(product), CacheKeys.PRODUCT_DETAIL_TTL);
+                } else {
+                    redisTemplate.opsForValue().set(cacheKey, CacheKeys.NULL_MARK,
+                            CacheKeys.PRODUCT_DETAIL_NULL_TTL);
+                    throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);
+                }
+            }
 
-        // 情况 A：拿到一段非空字符串 —— 是之前缓存下来的真数据（JSON）
-        //         hasText = "不是 null，且去掉空白后还有内容"
-        if (StringUtils.hasText(cached)) {
-            log.info("商品详情命中缓存 -> productId={}", id);
-            // JSON 字符串 → Product 对象。注意用 readValue，不是 convertValue
-            return objectMapper.readValue(cached, Product.class);
+            // 第 ③ 步：卖家简况（独立 60 秒缓存）
+            String briefKey = CacheKeys.USER_BRIEF_PREFIX + product.getSellerId();
+            String briefJson = redisTemplate.opsForValue().get(briefKey);
+
+            SellerBriefVO seller;
+            if (StringUtils.hasText(briefJson)) {
+                seller = objectMapper.readValue(briefJson, SellerBriefVO.class);
+            } else {
+                User u = userMapper.selectById(product.getSellerId());
+                seller = new SellerBriefVO();
+                if (u != null) {                                  // ⚠️ 判空，别直接 .getNickname()
+                    seller.setNickname(u.getNickname());
+                    seller.setAvatar(u.getAvatar());
+                    seller.setCampus(u.getCampus());
+                }
+                seller.setAvgRating(reviewMapper.selectAvgRating(product.getSellerId()));   // 无评价 = null
+                seller.setReviewCount(reviewMapper.selectCount(
+                        new LambdaQueryWrapper<Review>().eq(Review::getSellerId, product.getSellerId())));
+
+                redisTemplate.opsForValue().set(briefKey,
+                        objectMapper.writeValueAsString(seller), CacheKeys.USER_BRIEF_TTL);
+            }
+
+            // 第 ④ 步：逐字段搬进 VO
+            ProductDetailVO vo = new ProductDetailVO();
+            vo.setId(product.getId());
+            vo.setSellerId(product.getSellerId());
+            vo.setCategoryId(product.getCategoryId());
+            vo.setTitle(product.getTitle());
+            vo.setDescription(product.getDescription());
+            vo.setPrice(product.getPrice());
+            vo.setStatus(product.getStatus());
+            vo.setConditionLevel(product.getConditionLevel());
+            vo.setImages(product.getImages());
+            vo.setCreateTime(product.getCreateTime());
+            vo.setUpdateTime(product.getUpdateTime());
+            vo.setSeller(seller);
+            return vo;
+
         }
 
-        // 情况 B：拿到了空串 —— 这是上次留下的"空值标记"，说明库里确实没有
-        //         （能走到这里，cached 只可能是 ""，因为上面已经把 null 排除了）
-        if (cached != null) {
-            log.warn("商品详情被空值标记拦下，不查库 -> productId={}", id);
-            throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);
-        }
 
-        // 情况 C：cached == null —— 从来没缓存过，第一次来 → 回源查数据库
-        log.info("商品详情缓存未命中，回源查库 -> productId={}", id);
-        Product product = productMapper.selectById(id);
-
-        // ---------- 第 2 步：库里查到了 → 写缓存，再返回 ----------
-        if (product != null) {
-            redisTemplate.opsForValue().set(
-                    cacheKey,
-                    objectMapper.writeValueAsString(product),   // Product → JSON 字符串
-                    CacheKeys.PRODUCT_DETAIL_TTL);                                 // 30 分钟过期
-            return product;
-        }
-
-        // ---------- 第 3 步：库里也没有 → 写"空值标记"，防穿透 ----------
-        redisTemplate.opsForValue().set(cacheKey, CacheKeys.NULL_MARK, CacheKeys.PRODUCT_DETAIL_NULL_TTL);  // 空串，只存 1 分钟
-        throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);
-    }
     /** 记一次浏览：商品 id 当 member，当前时间戳当分数 */
     private void recordHistory(Long productId) {
         Long userId = UserContext.get().getId();

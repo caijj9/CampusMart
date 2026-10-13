@@ -6,8 +6,9 @@ import com.itcjj.campusmart.dto.LoginDTO;
 import com.itcjj.campusmart.dto.PasswordDTO;
 import com.itcjj.campusmart.dto.UserDTO;
 import com.itcjj.campusmart.dto.ValidGroup;
-import com.itcjj.campusmart.entity.User;
 import com.itcjj.campusmart.service.UserService;
+import com.itcjj.campusmart.vo.UserAdminVO;
+import com.itcjj.campusmart.vo.UserProfileVO;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -26,7 +27,7 @@ public class UserController {
     // 获取用户列表
     @RequireAdmin
     @GetMapping("/list")
-    public Result<List<User>> list() {
+    public Result<List<UserAdminVO>> list() {
         return Result.success(userService.listAll());
     }
     // 添加用户
@@ -62,7 +63,7 @@ public class UserController {
         return Result.success(null);
     }
     @GetMapping("/me")
-    public Result<User> me() {
+    public Result<UserProfileVO> me() {
         return Result.success(userService.getCurrentUser());
     }
 

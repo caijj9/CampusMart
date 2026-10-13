@@ -14,12 +14,15 @@ import com.itcjj.campusmart.service.FileStorageService;
 import com.itcjj.campusmart.service.UserService;
 import com.itcjj.campusmart.util.JwtUtil;
 import com.itcjj.campusmart.util.UserContext;
+import com.itcjj.campusmart.vo.UserAdminVO;
+import com.itcjj.campusmart.vo.UserProfileVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -37,9 +40,25 @@ public class UserServiceImpl implements UserService {
     private FileStorageService fileStorageService;
 
     @Override
-    public List<User> listAll() {
+    public List<UserAdminVO> listAll() {
         // 查询列表不打日志：会被翻页刷爆，没有留存价值
-        return userMapper.selectList(null);
+        List<User> users = userMapper.selectList(null);
+
+        // 实体 -> VO：只搬管理端该看的字段（⚠️ 不含 phone / tokenVersion / deleted）
+        List<UserAdminVO> list = new ArrayList<>();
+        for (User u : users) {
+            UserAdminVO vo = new UserAdminVO();
+            vo.setId(u.getId());
+            vo.setUsername(u.getUsername());
+            vo.setNickname(u.getNickname());
+            vo.setAvatar(u.getAvatar());
+            vo.setCampus(u.getCampus());
+            vo.setRole(u.getRole());
+            vo.setStatus(u.getStatus());
+            vo.setCreateTime(u.getCreateTime());
+            list.add(vo);
+        }
+        return list;
     }
 
     @Override
@@ -122,9 +141,23 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public User getCurrentUser() {
+    public UserProfileVO getCurrentUser() {
         CurrentUser current = UserContext.get();// 👈 关键在这行
-        return userMapper.selectById(current.getId());
+        User u = userMapper.selectById(current.getId());
+
+        // 实体 -> VO：保留自己的 phone（个人资料页要用），去掉 tokenVersion / deleted
+        UserProfileVO vo = new UserProfileVO();
+        vo.setId(u.getId());
+        vo.setUsername(u.getUsername());
+        vo.setNickname(u.getNickname());
+        vo.setAvatar(u.getAvatar());
+        vo.setCampus(u.getCampus());
+        vo.setPhone(u.getPhone());
+        vo.setRole(u.getRole());
+        vo.setStatus(u.getStatus());
+        vo.setCreateTime(u.getCreateTime());
+        vo.setUpdateTime(u.getUpdateTime());
+        return vo;
     }
 
     @Override

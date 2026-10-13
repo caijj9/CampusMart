@@ -10,6 +10,7 @@ import com.itcjj.campusmart.mapper.FavoriteMapper;
 import com.itcjj.campusmart.mapper.ProductMapper;
 import com.itcjj.campusmart.service.FavoriteService;
 import com.itcjj.campusmart.util.UserContext;
+import com.itcjj.campusmart.vo.ProductListVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -70,7 +71,7 @@ public class FavoriteServiceImpl implements FavoriteService {
     }
 
     @Override
-    public List<Product> list() {
+    public List<ProductListVO> list() {
         Long userId = UserContext.get().getId();
 
         // ① 先拿收藏记录（按时间倒序，这个顺序是有序的）
@@ -92,9 +93,11 @@ public class FavoriteServiceImpl implements FavoriteService {
 
         // ③ ⚠️ 按 productIds 的顺序重新排列
         //    （selectBatchIds 用 IN 查询，MySQL 不保证返回顺序）
+        //    ④ 实体 -> VO（唯一出处 ProductListVO.from）
         return productIds.stream()
                 .map(map::get)
                 .filter(Objects::nonNull)        // 商品可能已被删除，过滤掉
+                .map(ProductListVO::from)
                 .collect(Collectors.toList());
     }
 }

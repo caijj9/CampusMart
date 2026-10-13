@@ -1,8 +1,8 @@
 package com.itcjj.campusmart.controller;
 
 import com.itcjj.campusmart.common.Result;
-import com.itcjj.campusmart.entity.Product;
 import com.itcjj.campusmart.service.FavoriteService;
+import com.itcjj.campusmart.vo.ProductListVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,7 +26,7 @@ public class FavoriteController {
         return Result.success("取消收藏成功");
     }
     @GetMapping("/list")
-    public Result<List<Product>> list() {
+    public Result<List<ProductListVO>> list() {
         return Result.success(favoriteService.list());
     }
 

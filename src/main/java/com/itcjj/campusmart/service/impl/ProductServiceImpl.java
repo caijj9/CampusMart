@@ -8,12 +8,14 @@ import com.itcjj.campusmart.common.CodeEnum;
 import com.itcjj.campusmart.dto.ProductDTO;
 import com.itcjj.campusmart.dto.ProductSearchDTO;
 import com.itcjj.campusmart.dto.ProductUpdateDTO;
+import com.itcjj.campusmart.entity.Category;
 import com.itcjj.campusmart.entity.Order;
 import com.itcjj.campusmart.entity.Product;
 import com.itcjj.campusmart.entity.Review;
 import com.itcjj.campusmart.entity.User;
 import com.itcjj.campusmart.enums.OrderStatus;
 import com.itcjj.campusmart.exception.BizException;
+import com.itcjj.campusmart.mapper.CategoryMapper;
 import com.itcjj.campusmart.mapper.OrderMapper;
 import com.itcjj.campusmart.mapper.ProductMapper;
 import com.itcjj.campusmart.mapper.ReviewMapper;
@@ -22,6 +24,7 @@ import com.itcjj.campusmart.service.ProductService;
 import com.itcjj.campusmart.util.UserContext;
 import com.itcjj.campusmart.vo.ProductAdminVO;
 import com.itcjj.campusmart.vo.ProductDetailVO;
+import com.itcjj.campusmart.vo.ProductListVO;
 import com.itcjj.campusmart.vo.SellerBriefVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +52,8 @@ public class ProductServiceImpl implements ProductService {
     private StringRedisTemplate redisTemplate;   // 操作 Redis 的工具
     @Autowired
     private ObjectMapper objectMapper;           // 对象 ⇄ JSON 的转换器
+    @Autowired
+    private CategoryMapper categoryMapper;       // 校验 categoryId 是否真实存在
 
 
 
@@ -148,16 +153,24 @@ public class ProductServiceImpl implements ProductService {
         log.info("商品删除成功 -> 操作人={}, productId={}", UserContext.get().getId(), id);
     }
     @Override// ProductServiceImpl
-    public List<Product> listByCategory(Long categoryId) {
-        return productMapper.selectList(
+    public List<ProductListVO> listByCategory(Long categoryId) {
+        // 分类不存在 → 明确报错（而不是静默返回空列表，让调用方以为是"该分类没商品"）
+        assertCategoryExists(categoryId);
+
+        List<Product> products = productMapper.selectList(
                 new LambdaQueryWrapper<Product>()
                         .eq(Product::getCategoryId, categoryId)
                         .eq(Product::getStatus, 1)
-                        .orderByDesc(Product::getCreateTime));
+                        .orderByDesc(Product::getCreateTime, Product::getId));   // id 兜底，稳定排序
+
+        return products.stream().map(ProductListVO::from).collect(Collectors.toList());
     }
     @Override
-    public Page<Product> search(ProductSearchDTO dto) {
-        Page<Product> page = new Page<>(dto.getPageNum(), dto.getPageSize());
+    public Page<ProductListVO> search(ProductSearchDTO dto) {
+        // 分类不存在 → 明确报错（不再是"返回空列表"）
+        if (dto.getCategoryId() != null) {
+            assertCategoryExists(dto.getCategoryId());
+        }
 
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
                 .eq(Product::getStatus, 1)                    // 只查在售
@@ -171,17 +184,30 @@ public class ProductServiceImpl implements ProductService {
                         .or()
                         .like(Product::getDescription, dto.getKeyword()));
 
-// 排序（白名单）
+        // 排序（白名单）—— ⚠️ 每种排序最后都要带 id 兜底，否则同价商品顺序不定，翻页会重复/漏
         if ("price_asc".equals(dto.getSortBy())) {
-            wrapper.orderByAsc(Product::getPrice);
+            wrapper.orderByAsc(Product::getPrice).orderByAsc(Product::getId);
         } else if ("price_desc".equals(dto.getSortBy())) {
-            wrapper.orderByDesc(Product::getPrice);
+            wrapper.orderByDesc(Product::getPrice).orderByDesc(Product::getId);
         } else {
-            wrapper.orderByDesc(Product::getCreateTime);     // 默认：最新在前
+            wrapper.orderByDesc(Product::getCreateTime, Product::getId);  // 默认：最新在前
         }
 
-        return productMapper.selectPage(page, wrapper);
+        // 分页兜底（和其他列表接口统一）：
+        //   页码 <1 已被 Controller 的 @Min(1) 拦成 400，这里只兜 null；
+        //   每页上限 50 —— 超了【截断】不报错
+        Integer pageNum = (dto.getPageNum() == null || dto.getPageNum() < 1) ? 1 : dto.getPageNum();
+        Integer pageSize = (dto.getPageSize() == null) ? 10 : Math.min(dto.getPageSize(), 50);
 
+        Page<Product> src = productMapper.selectPage(
+                new Page<>(pageNum, pageSize), wrapper);
+
+        // 实体 -> VO（唯一出处 ProductListVO.from，⚠️ 不把 deleted / version 漏给前端）
+        Page<ProductListVO> voPage = new Page<>(src.getCurrent(), src.getSize(), src.getTotal());
+        voPage.setRecords(src.getRecords().stream()
+                .map(ProductListVO::from)
+                .collect(Collectors.toList()));
+        return voPage;
     }
     @Override
     public List<String> uploadImages(List<MultipartFile> files) {
@@ -210,9 +236,6 @@ public class ProductServiceImpl implements ProductService {
     private ReviewMapper reviewMapper;
     @Override
     public ProductDetailVO getDetail(Long id) {
-            // 第 0 步：记浏览历史（不变）
-            recordHistory(id);
-
             String cacheKey = CacheKeys.PRODUCT_DETAIL_PREFIX + id;
             String cached = redisTemplate.opsForValue().get(cacheKey);
 
@@ -233,6 +256,12 @@ public class ProductServiceImpl implements ProductService {
                     throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);
                 }
             }
+
+            // ===== 到这里 product 一定有了（没有的话上面已经 throw 出去了）=====
+            // 第 0 步：记浏览历史
+            // ⚠️ 必须放在「确认商品存在」之后：否则传一个不存在的商品 id，也会被记进浏览历史
+            //    （能这么搬，是因为三分支已经合并成单出口，不再有早 return 挡住下面的代码）
+            recordHistory(id);
 
             // 第 ③ 步：卖家简况（独立 60 秒缓存）
             String briefKey = CacheKeys.USER_BRIEF_PREFIX + product.getSellerId();
@@ -290,7 +319,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public List<Product> getHistory() {
+    public List<ProductListVO> getHistory() {
         Long userId = UserContext.get().getId();
         String key = CacheKeys.HISTORY_PREFIX + userId;
 
@@ -308,9 +337,11 @@ public class ProductServiceImpl implements ProductService {
                 .collect(Collectors.toMap(Product::getId, p -> p));
 
         // ④ 按 ids 的顺序重排（selectBatchIds 不保证返回顺序！）
+        //    ⑤ 实体 -> VO（唯一出处 ProductListVO.from）
         return ids.stream()
                 .map(map::get)
                 .filter(Objects::nonNull)         // 商品可能已被删掉
+                .map(ProductListVO::from)
                 .collect(Collectors.toList());
     }
 
@@ -353,6 +384,18 @@ public class ProductServiceImpl implements ProductService {
                 UserContext.get().getId(), id, reason);
     }
 
+    /** 分类必须真实存在 —— 否则「查不到商品」和「分类 id 传错了」看起来一模一样 */
+    private void assertCategoryExists(Long categoryId) {
+        if (categoryId == null) {
+            return;
+        }
+        Long count = categoryMapper.selectCount(new LambdaQueryWrapper<Category>()
+                .eq(Category::getId, categoryId));
+        if (count == null || count == 0) {
+            throw new BizException(CodeEnum.CATEGORY_NOT_FOUND);
+        }
+    }
+
     private void assertNotTrading(Long productId) {
         Long count = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
                 .eq(Order::getProductId, productId)
@@ -366,17 +409,24 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public Page<Product> listMine(Integer status, Integer pageNum, Integer pageSize) {
+    public Page<ProductListVO> listMine(Integer status, Integer pageNum, Integer pageSize) {
         Long sellerId = UserContext.get().getId();
         //status可以筛选，分页pageNum默认1，pagesize默认10，上限50
         pageNum = (pageNum == null || pageNum < 1) ? 1 : pageNum;
         pageSize = pageSize == null ? 10 : Math.min(pageSize, 50);
-        //排序
-        Page<Product> page = new Page<>(pageNum, pageSize);
-        return productMapper.selectPage(page, new LambdaQueryWrapper<Product>()
-                .eq(Product::getSellerId, sellerId)
-                .eq(status != null, Product::getStatus, status)
-                .orderByDesc(Product::getCreateTime, Product::getId));
+
+        Page<Product> src = productMapper.selectPage(new Page<>(pageNum, pageSize),
+                new LambdaQueryWrapper<Product>()
+                        .eq(Product::getSellerId, sellerId)
+                        .eq(status != null, Product::getStatus, status)
+                        .orderByDesc(Product::getCreateTime, Product::getId));
+
+        // 实体 -> VO（唯一出处 ProductListVO.from）
+        Page<ProductListVO> voPage = new Page<>(src.getCurrent(), src.getSize(), src.getTotal());
+        voPage.setRecords(src.getRecords().stream()
+                .map(ProductListVO::from)
+                .collect(Collectors.toList()));
+        return voPage;
     }
 
     @Override

@@ -113,8 +113,11 @@ application.yml 中【未配置】spring.jackson.date-format / time-zone
 - `GET` 接口 → **查询字符串**（`?pageNum=1&pageSize=10`）
 - `POST` 接口 → JSON body
 
-⚠️ **现状差距（D8 要补）**：现有 `GET /product/search` 的 `pageNum` / `pageSize` **无范围校验**，
-排序**只有 `createTime DESC`、没有 id 兜底**（同时间的顺序不稳定）。
+⚠️ **D8 已补齐**：`pageNum < 1` → `400`（Controller 上 `@Validated` + `@Min(1)`）；
+`pageSize > 50` → 在 Service 里 `Math.min` **截断为 50（不报错）**；
+排序**全部带 id 兜底**（含 `price_asc` / `price_desc`）；
+`keyword` 加 `@Size(max = 50)`；
+不存在的 `categoryId` → `2016` 明确报错（不再静默返回空列表）。
 
 ### 0.5 状态字典
 
@@ -177,10 +180,14 @@ application.yml 中【未配置】spring.jackson.date-format / time-zone
 | 1004 | 原密码错误 | 2012 | 该订单已评价过 |
 | 1005 | 上传文件不能为空 | 2013 | 商品当前状态不允许重新上架 |
 | 1006 | 图片格式不支持 | 2015 | 用户已被禁用（账号被停用） |
-| 1007 | 文件上传失败 | | |
+| 1007 | 文件上传失败 | 2016 | 分类不存在 |
 | 2001 | 商品不存在 | 2014 | 商品已售出，不能下架 |
 | 2002 | 最多上传 9 张图片 | | |
 | 2003 | 商品已售出或已下架 | | |
+
+> ⚠️ **`400` 不是枚举，是全局异常处理器直接返回的**（参数校验 / 缺少必填参数 / 参数类型不对）。
+> `404` 同理（访问不存在的路径）。D8 补齐了 `GlobalExceptionHandler` 里对应的 handler ——
+> 在此之前这些情况**全被兜底成 `500`「服务器开小差了」**。
 
 > ⚠️ **2014 与 2015 不要弄混**：`2014` 是「**商品**已售出不能下架」（管理员下架用）；
 > `2015` 是「**用户**已被禁用」（枚举名 `USER_DISABLED`）。

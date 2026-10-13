@@ -8,11 +8,14 @@ import com.itcjj.campusmart.service.ProductService;
 import com.itcjj.campusmart.service.UserService;
 import com.itcjj.campusmart.vo.ProductAdminVO;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/admin")
+@Validated
 public class AdminController {
 
     @Autowired
@@ -49,7 +52,8 @@ public class AdminController {
     public Result<Page<ProductAdminVO>> searchProduct(@RequestParam(required = false) Integer status,
                                                       @RequestParam(required = false) String keyword,
                                                       @RequestParam(required = false) Long categoryId,
-                                                      @RequestParam(defaultValue = "1") Integer pageNum,
+                                                      @RequestParam(defaultValue = "1")
+                                                      @Min(value = 1, message = "页码不能小于 1") Integer pageNum,
                                                       @RequestParam(defaultValue = "10") Integer pageSize) {
         return Result.success(productService.adminSearch(status, keyword, categoryId, pageNum, pageSize));
     }

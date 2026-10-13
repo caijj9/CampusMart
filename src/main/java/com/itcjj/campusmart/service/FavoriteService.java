@@ -1,6 +1,6 @@
 package com.itcjj.campusmart.service;
 
-import com.itcjj.campusmart.entity.Product;
+import com.itcjj.campusmart.vo.ProductListVO;
 
 import java.util.List;
 
@@ -13,6 +13,6 @@ public interface FavoriteService {
     void removeFavorite(Long productId);
 
     /** 我的收藏列表（按收藏时间倒序） */
-    List<Product> list();
+    List<ProductListVO> list();
 }
 

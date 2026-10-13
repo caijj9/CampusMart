@@ -7,11 +7,14 @@ import com.itcjj.campusmart.service.OrderService;
 import com.itcjj.campusmart.vo.OrderDetailVO;
 import com.itcjj.campusmart.vo.OrderListVO;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/order")
+@Validated
 public class OrderController {
 
     @Autowired
@@ -51,14 +54,16 @@ public class OrderController {
     }
     @GetMapping("/bought")
     public Result<Page<OrderListVO>> bought(@RequestParam(required = false) Integer status,
-                                            @RequestParam(defaultValue = "1") Integer pageNum,
+                                            @RequestParam(defaultValue = "1")
+                                            @Min(value = 1, message = "页码不能小于 1") Integer pageNum,
                                             @RequestParam(defaultValue = "10") Integer pageSize) {
         return Result.success(orderService.listBought(status, pageNum, pageSize));
     }
 
     @GetMapping("/sold")
     public Result<Page<OrderListVO>> sold(@RequestParam(required = false) Integer status,
-                                          @RequestParam(defaultValue = "1") Integer pageNum,
+                                          @RequestParam(defaultValue = "1")
+                                          @Min(value = 1, message = "页码不能小于 1") Integer pageNum,
                                           @RequestParam(defaultValue = "10") Integer pageSize) {
         return Result.success(orderService.listSold(status, pageNum, pageSize));
     }

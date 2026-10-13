@@ -27,6 +27,7 @@ public enum CodeEnum {
     PRODUCT_IN_TRADE(2010, "商品正在交易中"),
     PRODUCT_RELIST_NOT_ALLOWED(2013, "商品当前状态不允许重新上架"),
     PRODUCT_SOLD_CANNOT_OFFLINE(2014, "商品已售出，不能下架"),
+    CATEGORY_NOT_FOUND(2016, "分类不存在"),
     ORDER_NOT_COMPLETED(2011, "订单未完成"),
     ALREADY_REVIEWED(2012, "已评价"),
     USER_DISABLED(2015, "用户已禁用"),

@@ -1,6 +1,7 @@
 package com.itcjj.campusmart.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.itcjj.campusmart.common.CodeEnum;
 import com.itcjj.campusmart.dto.ReviewDTO;
 import com.itcjj.campusmart.entity.Order;
@@ -11,10 +12,15 @@ import com.itcjj.campusmart.mapper.OrderMapper;
 import com.itcjj.campusmart.mapper.ReviewMapper;
 import com.itcjj.campusmart.service.ReviewService;
 import com.itcjj.campusmart.util.UserContext;
+import com.itcjj.campusmart.vo.ReviewVO;
+import com.itcjj.campusmart.vo.SellerReviewVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -72,4 +78,42 @@ public class ReviewServiceImpl implements ReviewService {
         log.info("评价提交成功 -> orderId={}, buyerId={}, sellerId={}, rating={}",
                 orderId, review.getBuyerId(), review.getSellerId(), review.getRating());
     }
+
+    @Override
+    public SellerReviewVO listBySeller(Long sellerId, Integer pageNum, Integer pageSize) {
+        // ① 分页参数兜底（和 listBought 一致：默认 10 / 上限 50）
+        pageNum = (pageNum == null || pageNum < 1) ? 1 : pageNum;
+        pageSize = pageSize == null ? 10 : Math.min(pageSize, 50);
+
+        // ② 查这一页的评价
+        Page<Review> src = reviewMapper.selectPage(new Page<>(pageNum, pageSize),
+                new LambdaQueryWrapper<Review>()
+                        .eq(Review::getSellerId, sellerId)
+                        .orderByDesc(Review::getCreateTime, Review::getId));
+
+        // ③ 实体 -> VO，逐条搬（每轮都 new 一个新的）
+        List<ReviewVO> records = new ArrayList<>();
+        for (Review review : src.getRecords()) {
+            ReviewVO vo = new ReviewVO();
+            vo.setId(review.getId());
+            vo.setContent(review.getContent());
+            vo.setRating(review.getRating());
+            vo.setCreateTime(review.getCreateTime());
+            records.add(vo);
+        }
+
+        // ④ 分页信息一起搬（current/size/total 少一个前端页码就乱）
+        Page<ReviewVO> voPage = new Page<>(src.getCurrent(), src.getSize(), src.getTotal());
+        voPage.setRecords(records);
+
+        // ⑤ 组装
+        SellerReviewVO result = new SellerReviewVO();
+        result.setPage(voPage);
+        result.setReviewCount(src.getTotal());                          // 已经数过了，不再查 COUNT
+        result.setAvgRating(reviewMapper.selectAvgRating(sellerId));    // 无评价就是 null
+        return result;
+    }
+
+
+
 }

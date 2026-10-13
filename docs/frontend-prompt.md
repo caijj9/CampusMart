@@ -629,3 +629,89 @@ GET /product/{id}
 - [ ] 点「查看全部评价」→ 跳到 `/sellers/{sellerId}`
 - [ ] `npm run build` 零报错
 
+---
+
+## 13. 第 9 轮（10.13 追加）：管理端页面（商品查询 + 用户启用/禁用）
+
+**背景**：后端 D7 前半段已完成（**已实测**），管理端接口可用。前端 §9 的「管理端」批次可以开工了。
+
+**已实测的后端返回：**
+
+```
+GET /admin/product/search?status=3&pageSize=1
+→ {"code":0,"data":{
+     "records":[{"id":44,"sellerId":29,"categoryId":1,"title":"D3-平台下架模拟",
+                 "price":66.00,"status":3,"conditionLevel":1,"images":"",
+                 "createTime":"2026-10-12T13:23:51",
+                 "offlineReason":null,"offlineTime":null}],
+     "total":2,"size":1,"current":1,"pages":2}}
+
+PUT /admin/user/disable/{id}  → {"code":0,"data":"已禁用"}
+PUT /admin/user/enable/{id}   → {"code":0,"data":"已启用"}
+
+GET /user/list                → ApiResult<User[]>（返回的是【实体】，见下方 ⚠️）
+```
+
+⚠️ **五个必须遵守的点**
+
+1. **只有 ADMIN 能用** —— 普通用户调管理接口拿到 `403`。
+   前端判断依据：`GET /user/me` 的返回里有 `role`（`'USER'` / `'ADMIN'`）→ 用已有的 auth store。
+   **非 ADMIN 直接不给入口**（导航栏不显示），并且 `/admin` 路由本身也要挡（不能只靠隐藏入口）
+2. `status` 四种值要显示成人话：**`0` 卖家下架 / `1` 在售 / `2` 已售出 / `3` 平台下架**
+3. `offlineReason` / `offlineTime` **只有 `status = 3` 时才有值**，其余情况是 `null`
+4. `images` 是逗号分隔的字符串（可能为空串），取第一张做缩略图即可，别当数组用
+5. ⚠️ **`GET /user/list` 返回的是实体**，含 `phone` / `tokenVersion` / `deleted` 等内部字段
+   → **只渲染 `id` / `username` / `nickname` / `role` / `status`**，
+     **手机号先不要显示**（后端还没决定是否给管理员看，别自作主张）
+
+⚠️ **本轮不做**：`PUT /admin/product/offline/{id}`（强制下架）后端**还没做**，
+做了会返工 —— 等下一条提示词。
+
+**提示词（直接粘给 Codex）：**
+
+```
+读 AGENTS.md。后端管理端接口已完成（已实测确认），现在做管理端页面。
+
+接口：
+GET  /admin/product/search?status=&keyword=&categoryId=&pageNum=&pageSize=
+  → ApiResult<Page<AdminProduct>>
+     AdminProduct = { id, sellerId, categoryId, title, price, status, conditionLevel,
+                      images, createTime, offlineReason: string | null, offlineTime: string | null }
+PUT  /admin/user/disable/{id}  → ApiResult<string>
+PUT  /admin/user/enable/{id}   → ApiResult<string>
+GET  /user/list                → ApiResult<User[]>（注意：返回的是实体，含 phone / tokenVersion / deleted）
+
+任务：
+1. 新建 src/types/admin.ts：AdminProduct 接口（字段同上）。
+2. 新建 src/api/admin.ts：
+   - searchAdminProducts(params, signal) → client.get('/admin/product/search', { params, signal })，返回 data.data
+   - disableUser(id) → client.put(`/admin/user/disable/${id}`)，返回 data.data
+   - enableUser(id)  → client.put(`/admin/user/enable/${id}`)，返回 data.data
+   都要把 signal 传下去。
+3. 新建 src/pages/AdminPage.tsx，路由 /admin（放在 ProtectedRoute 里面）：
+   两个页签：「商品管理」/「用户管理」。
+   - 商品管理：搜索框（关键字）+ 状态下拉（全部 / 在售 1 / 卖家下架 0 / 已售出 2 / 平台下架 3）
+     + 分类下拉（复用 GET /category/list）+ 分页
+     表格列：ID / 标题 / 价格 / 状态徽章 / 卖家 ID / 创建时间
+     状态徽章四种状态要用不同颜色区分；status=3 时额外显示下架原因（offlineReason，为 null 就显示"—"）
+   - 用户管理：用 GET /user/list 渲染列表，每行一个「禁用 / 启用」按钮
+     （按该用户的 status 决定显示哪个），操作成功后 toast + 刷新列表
+     ⚠️ 只渲染 id / username / nickname / role / status —— 手机号不要显示
+   - 三个状态都要有：加载中 / 出错（可重试）/ 空列表
+4. 导航栏：只在 currentUser.role === 'ADMIN' 时显示「管理」入口。
+   ⚠️ 同时 /admin 路由本身要判角色，非 ADMIN 重定向回首页 —— 不能只靠隐藏入口。
+5. 本轮不要做「强制下架」按钮（后端接口还没做）。
+6. 跑 npm run build 确保零 TypeScript 错误。
+
+视觉风格与站内其他页面保持一致。
+```
+
+**验收**
+
+- [ ] 管理员登录 → 导航栏出现「管理」
+- [ ] 商品管理：不筛选显示 58 条；选「平台下架」显示 2 条；关键字 `D5` 显示 4 条
+- [ ] 四种状态徽章颜色能区分开
+- [ ] 用户管理「禁用」某用户 → toast 成功，该行变成「已禁用」；再「启用」恢复
+- [ ] 普通用户手动访问 `/admin` → 被挡住（不是只隐藏入口）
+- [ ] `npm run build` 零报错
+

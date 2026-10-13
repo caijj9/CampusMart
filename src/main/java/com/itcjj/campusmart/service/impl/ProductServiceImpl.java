@@ -32,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.itcjj.campusmart.service.FileStorageService;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -269,6 +270,7 @@ public class ProductServiceImpl implements ProductService {
             vo.setImages(product.getImages());
             vo.setCreateTime(product.getCreateTime());
             vo.setUpdateTime(product.getUpdateTime());
+            vo.setOfflineReason(product.getOfflineReason());   // 仅 status=3 有值
             vo.setSeller(seller);
             return vo;
 
@@ -315,6 +317,42 @@ public class ProductServiceImpl implements ProductService {
     @Autowired
     private OrderMapper orderMapper;
     // ProductServiceImpl 里加私有方法
+    // ==================== 管理端 ====================
+
+    @Override
+    public void offlineByAdmin(Long id, String reason) {
+        // ① 商品存在吗
+        Product old = productMapper.selectById(id);
+        if (old == null) {
+            throw new BizException(CodeEnum.PRODUCT_NOT_FOUND);      // 2001
+        }
+
+        // ② 已售出的商品没有「下架」这回事 —— 单独报 2014，比笼统的 2003 说得清楚
+        //    （已售出一定伴随一笔订单，所以这一条必须排在「交易中」前面，否则会被报成 2010）
+        if (old.getStatus() == 2) {
+            throw new BizException(CodeEnum.PRODUCT_SOLD_CANNOT_OFFLINE);   // 2014
+        }
+
+        // ③ 交易中不能下架（跨表查 orders）—— 必须先于 CAS，报的是 2010
+        assertNotTrading(id);
+
+        // ④ CAS：状态白名单塞进 WHERE，一条 UPDATE 同时改三列
+        int rows = productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                .eq(Product::getId, id)
+                .in(Product::getStatus, 0, 1)                        // ⚠️ 在售 + 卖家已下架，都能平台下架
+                .set(Product::getStatus, 3)                          // 3 = 平台下架
+                .set(Product::getOfflineReason, reason)
+                .set(Product::getOfflineTime, LocalDateTime.now()));
+        if (rows == 0) {
+            throw new BizException(CodeEnum.PRODUCT_STATUS_ERROR);   // 2003：兜底（已平台下架 3 / 并发变化）
+        }
+
+        // ⑤ 清详情缓存（下架了，详情页必须马上变）
+        redisTemplate.delete(CacheKeys.PRODUCT_DETAIL_PREFIX + id);
+        log.info("平台下架商品 -> 操作人={}, productId={}, reason={}",
+                UserContext.get().getId(), id, reason);
+    }
+
     private void assertNotTrading(Long productId) {
         Long count = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
                 .eq(Order::getProductId, productId)

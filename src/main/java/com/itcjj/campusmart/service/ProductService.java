@@ -37,5 +37,8 @@ public interface ProductService {
 
     void relist(Long id);
 
+    /** 管理员强制下架：只允许 status ∈ (0,1)，拒绝已售出(2)/已平台下架(3)/交易中；记录原因 */
+    void offlineByAdmin(Long id, String reason);
+
 }
 

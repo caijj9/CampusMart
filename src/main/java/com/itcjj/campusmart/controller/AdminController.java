@@ -3,9 +3,11 @@ package com.itcjj.campusmart.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.itcjj.campusmart.annotation.RequireAdmin;
 import com.itcjj.campusmart.common.Result;
+import com.itcjj.campusmart.dto.ProductOfflineDTO;
 import com.itcjj.campusmart.service.ProductService;
 import com.itcjj.campusmart.service.UserService;
 import com.itcjj.campusmart.vo.ProductAdminVO;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -50,5 +52,19 @@ public class AdminController {
                                                       @RequestParam(defaultValue = "1") Integer pageNum,
                                                       @RequestParam(defaultValue = "10") Integer pageSize) {
         return Result.success(productService.adminSearch(status, keyword, categoryId, pageNum, pageSize));
+    }
+
+    /**
+     * 平台强制下架
+     *
+     * 只允许操作 status = 1（在售）或 0（卖家下架）的商品；
+     * 已售出(2) / 已平台下架(3) / 交易中 一律拒绝。
+     */
+    @RequireAdmin
+    @PutMapping("/product/offline/{id}")
+    public Result<Void> offlineProduct(@PathVariable Long id,
+                                       @Valid @RequestBody ProductOfflineDTO dto) {
+        productService.offlineByAdmin(id, dto.getReason());
+        return Result.success(null);
     }
 }

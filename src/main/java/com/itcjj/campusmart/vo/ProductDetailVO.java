@@ -1,7 +1,6 @@
 package com.itcjj.campusmart.vo;
 
 import lombok.Data;
-import org.springframework.cglib.core.Local;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,7 +18,10 @@ public class ProductDetailVO {
     private String images;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
-    private SellerBriefVO seller;     // + import 同包的不用导，SellerBriefVO 就在 vo 包里
 
+    /** 平台下架原因（仅 status = 3 时有值，其余为 null） */
+    private String offlineReason;
 
+    /** 卖家公开信息（单独一层缓存：user:brief:{sellerId}，TTL 60s） */
+    private SellerBriefVO seller;
 }

@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS `product`
     -- ⚠️ 只加字段就用这两列，别写成 ALTER（init.sql 必须能反复执行）
     `offline_reason`  VARCHAR(200)  DEFAULT NULL COMMENT '平台下架原因（管理员填写，仅 status=3 时有值）',
     `offline_time`    DATETIME      DEFAULT NULL COMMENT '平台下架时间',
+    `view_count`      INT           NOT NULL DEFAULT 0 COMMENT '浏览次数：详情页每次访问原子 +1',
 
 PRIMARY KEY (`id`),
     -- 「你打算用它当查询条件，就给它建索引」：按卖家查「我的商品」、按分类筛选商品

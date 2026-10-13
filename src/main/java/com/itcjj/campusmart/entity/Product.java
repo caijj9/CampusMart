@@ -18,6 +18,8 @@ public class Product {
     // 平台下架：卖家下架是 status=0，平台下架是 status=3 —— 这两列只在平台下架时有值
     private String offlineReason;
     private LocalDateTime offlineTime;
+    // 浏览次数：每次打开详情页原子 +1（view_count = view_count + 1，让数据库自己加）
+    private Integer viewCount;
     private Long sellerId;
     private Long categoryId;
     private String title;

@@ -51,6 +51,7 @@ erDiagram
         int      version            "乐观锁版本号（并发下单防超卖）"
         varchar  offline_reason     "平台下架原因（管理员填写，仅 status=3 时有值）"
         datetime offline_time       "平台下架时间"
+        int      view_count         "浏览次数（详情页每次访问原子 +1）"
         datetime create_time        "创建时间"
         datetime update_time        "更新时间"
         tinyint  deleted            "逻辑删除 0未删 1已删"
@@ -120,4 +121,5 @@ erDiagram
 > 之前 `USER` / `CATEGORY` / `PRODUCT` / `ORDER` 四个实体都是 **9.10 设计期**写的，
 > 后来实现时改了不少字段，图没跟着更新（比如 `product` 曾规划过 `stock` / `cover_url` /
 > `view_count`，实际做成了「无库存 + 多图 `images`」）。
+> （其中 **`view_count` 已于 D8 补回**，见上方 PRODUCT 字段列表；`stock` / `cover_url` 确认不做。）
 > ⚠️ **以后改表一定要回来改这里** —— 文档和代码不一致，早晚会咬人。

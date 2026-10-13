@@ -263,6 +263,13 @@ public class ProductServiceImpl implements ProductService {
             //    （能这么搬，是因为三分支已经合并成单出口，不再有早 return 挡住下面的代码）
             recordHistory(id);
 
+            // 第 ⓪ 步：浏览量原子 +1
+            // ⚠️ 必须让【数据库自己加】：`view_count = view_count + 1` 写在 SQL 里，
+            //    绝不能用「查出来 +1 再写回」—— 并发下两个请求会都读到旧值，只加一次。
+            productMapper.update(null, new LambdaUpdateWrapper<Product>()
+                    .eq(Product::getId, id)
+                    .setSql("view_count = view_count + 1"));
+
             // 第 ③ 步：卖家简况（独立 60 秒缓存）
             String briefKey = CacheKeys.USER_BRIEF_PREFIX + product.getSellerId();
             String briefJson = redisTemplate.opsForValue().get(briefKey);
@@ -300,6 +307,8 @@ public class ProductServiceImpl implements ProductService {
             vo.setCreateTime(product.getCreateTime());
             vo.setUpdateTime(product.getUpdateTime());
             vo.setOfflineReason(product.getOfflineReason());   // 仅 status=3 有值
+            // 浏览量：必须回源读 —— 缓存里的 product 是旧的，刚才那次 +1 不在里面
+            vo.setViewCount(productMapper.selectViewCount(id));
             vo.setSeller(seller);
             return vo;
 

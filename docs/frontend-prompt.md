@@ -782,3 +782,54 @@ GET /product/{id}  → ProductDetail 多了一个 offlineReason: string | null�
 - [ ] 打开一个 `status=3` 的商品详情（例如商品 44「D3-平台下架模拟」）→ 看到下架提示条
 - [ ] `npm run build` 零报错
 
+---
+
+## 15. 第 11 轮（10.13 追加）：商品详情显示浏览量
+
+**背景**：后端 D8 完成 —— `ProductDetailVO` 多了 **`viewCount`**（每次打开详情页原子 +1，返回的是数据库实时值）。
+
+**已实测的后端返回：**
+
+```
+GET /product/61
+→ {"code":0,"data":{
+     ...原字段...,
+     "offlineReason": null,
+     "viewCount": 12,          ← 新增
+     "seller": { ... }}}
+```
+
+⚠️ **三个必须知道的点**
+
+1. **`viewCount` 每次请求都会 +1** —— 所以**刷新一次页面，它就大 1**。
+   **这是正常的**，不是 bug，也不用"修"。别为了让它稳定而去做缓存。
+2. 类型是 `number`（数据库列 `NOT NULL DEFAULT 0`）→ **不会是 `null`**，不用判空
+3. ⚠️ **只加在 `ProductDetail` 上**，**不要**加到 `Product` ——
+   列表接口（`/product/search`、`/product/list`、`/product/mine`、`/favorite/list`）**没有**这个字段
+
+**提示词（直接粘给 Codex）：**
+
+```
+读 AGENTS.md。后端商品详情新增了浏览量字段（已实测确认），现在在详情页显示出来。
+
+接口：
+GET /product/{id} → ProductDetail 多了一个 viewCount: number
+（每次请求后端都会把它 +1，返回的是数据库实时值）
+
+任务：
+1. src/types/product.ts：给 ProductDetail 加上 viewCount: number。
+   ⚠️ 不要加到 Product 上 —— 列表接口没有这个字段。
+2. src/pages/ProductDetailPage.tsx：显示「N 人看过」
+   - 用小字 + lucide 的 Eye 图标，放在价格/状态附近或标题下方，风格与页面一致
+   - 不需要判空（后端保证是数字）
+3. 跑 npm run build 确保零 TypeScript 错误。
+
+不要在列表页显示浏览量（列表接口没这个字段）。
+```
+
+**验收**
+
+- [ ] 打开任意商品详情 → 能看到「N 人看过」
+- [ ] **手动刷新一次页面 → 数字正好 +1**（说明后端的原子自增生效）
+- [ ] `npm run build` 零报错
+

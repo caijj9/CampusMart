@@ -20,6 +20,7 @@ import com.itcjj.campusmart.mapper.ReviewMapper;
 import com.itcjj.campusmart.mapper.UserMapper;
 import com.itcjj.campusmart.service.ProductService;
 import com.itcjj.campusmart.util.UserContext;
+import com.itcjj.campusmart.vo.ProductAdminVO;
 import com.itcjj.campusmart.vo.ProductDetailVO;
 import com.itcjj.campusmart.vo.SellerBriefVO;
 import lombok.extern.slf4j.Slf4j;
@@ -338,6 +339,45 @@ public class ProductServiceImpl implements ProductService {
                 .eq(Product::getSellerId, sellerId)
                 .eq(status != null, Product::getStatus, status)
                 .orderByDesc(Product::getCreateTime, Product::getId));
+    }
+
+    @Override
+    public Page<ProductAdminVO> adminSearch(Integer status, String keyword, Long categoryId,
+                                            Integer pageNum, Integer pageSize) {
+        // 分页统一约定：默认 10 / 上限 50
+        pageNum = (pageNum == null || pageNum < 1) ? 1 : pageNum;
+        pageSize = pageSize == null ? 10 : Math.min(pageSize, 50);
+
+        // ⚠️ 和公共 search 最大的区别：这里「不写死状态」—— status 为空就查全部（0/1/2/3）
+        Page<Product> src = productMapper.selectPage(new Page<>(pageNum, pageSize),
+                new LambdaQueryWrapper<Product>()
+                        .eq(status != null, Product::getStatus, status)
+                        .eq(categoryId != null, Product::getCategoryId, categoryId)
+                        // 管理端只按标题找（公共 search 查「标题 OR 描述」）—— 够用且少一层括号
+                        .like(StringUtils.hasText(keyword), Product::getTitle, keyword)
+                        .orderByDesc(Product::getCreateTime, Product::getId));
+
+        // 实体 -> VO，逐条搬（每轮都要 new 一个，别写在循环外）
+        List<ProductAdminVO> records = new ArrayList<>();
+        for (Product p : src.getRecords()) {
+            ProductAdminVO vo = new ProductAdminVO();
+            vo.setId(p.getId());
+            vo.setSellerId(p.getSellerId());
+            vo.setCategoryId(p.getCategoryId());
+            vo.setTitle(p.getTitle());
+            vo.setPrice(p.getPrice());
+            vo.setStatus(p.getStatus());
+            vo.setConditionLevel(p.getConditionLevel());
+            vo.setImages(p.getImages());
+            vo.setCreateTime(p.getCreateTime());
+            vo.setOfflineReason(p.getOfflineReason());
+            vo.setOfflineTime(p.getOfflineTime());
+            records.add(vo);
+        }
+
+        Page<ProductAdminVO> voPage = new Page<>(src.getCurrent(), src.getSize(), src.getTotal());
+        voPage.setRecords(records);
+        return voPage;
     }
 
     @Override

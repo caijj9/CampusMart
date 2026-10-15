@@ -7,6 +7,9 @@
 ```
 scripts/
 ├── e2e_full_flow.py      ⭐ 全链路回归（权威、可反复执行）
+├── concurrency_test.py   ⭐ 并发与一致性（5 组证据，输出汇总表）
+├── verify_init_sql.py    ⭐ init.sql 影子文件校验（从零建库 + 幂等 + 与真库比对）
+├── verify_config.py      ⭐ 配置一致性（yml vs yml.example + 敏感信息未入库）
 └── regression/           开发过程中的按天验收脚本（历史留存）
     ├── d1_trade_guard_test.py     D1 交易中商品保护
     ├── d2_timeout_test.py         D2 超时关闭 + 付款竞争
@@ -20,42 +23,32 @@ scripts/
     └── OrderRaceTest.java         并发抢购（50 线程，纯 Java 单文件）
 ```
 
+## 一键跑全部校验
+
+```powershell
+python scripts\e2e_full_flow.py      # 全链路：66 项断言
+python scripts\concurrency_test.py   # 并发：5 组证据（含 2 次 40 秒等待，约 90 秒）
+python scripts\verify_init_sql.py    # init.sql：从零建库 + 幂等 + 与真库结构比对
+python scripts\verify_config.py      # 配置：yml 与示例结构一致 + 敏感信息未入库
+```
+
+每个脚本成功时退出码 0，有失败项则非 0。
+
+## ⚠️ 关于 `concurrency_test.py` 里的两处「等 40 秒」
+
+C4 要验证**定时任务超时关闭**（`@Scheduled(fixedDelay = 30_000)`），脚本会把订单的
+`create_time` 改成 16 分钟前（超过 `TIMEOUT_MINUTES = 15`），然后等定时任务扫到。
+所以那两组各需要最多 40 秒，**不是卡住了**。
+
 ## 前置条件
 
 | 项 | 要求 |
 |---|---|
-| 后端 | 已启动在 `http://localhost:8080` |
-| MySQL | `D:\MYSQL\mysql-8.0.34-winx64`，库 `campusmart`，root/1234 |
+| 后端 | 已启动在 `http://localhost:8080`（`concurrency_test.py` / `e2e_full_flow.py` 需要） |
+| MySQL | `D:\MYSQL\mysql-8.0.34-winx64`，root/1234（`verify_*.py` 需要） |
 | Redis | 已启动（Windows 服务 `Redis`） |
 | Python | 3.8+（**只用标准库，无需 pip install**） |
 | 管理员账号 | `e2eadmin01` / `123456` 需预先存在 |
-
-## 跑全链路回归
-
-```powershell
-python scripts\e2e_full_flow.py
-```
-
-覆盖 8 个环节共 **66 项断言**：
-
-```
-注册 → 登录 → 上传图片 → 发布商品 → 搜索 / 详情
-     → 下单（幂等）→ 支付 → 发货 → 确认收货 → 评价 → 查卖家评价 → 平台下架
-外加：越权、非法状态流转、重复提交、重复评价、参数校验等异常路径
-```
-
-脚本**只新建数据、不删除历史数据**，每次运行生成两个带时间戳的新账号，可反复执行。
-末尾会打印 `结果：N/66 通过`；有失败项时以非 0 退出码结束（可直接接 CI）。
-
-## 跑并发相关
-
-```powershell
-# 50 线程同时抢购同一商品 → 期望只产生 1 单
-E:\java\bin\java.exe scripts\regression\OrderRaceTest.java
-
-# 20 线程用同一幂等 Token 下单 → 期望只成功 1 次
-python scripts\regression\idem_concurrent.py
-```
 
 ## 说明：`regression/` 里的脚本
 

@@ -7,7 +7,10 @@
 
 ```powershell
 # 前提：后端已启动在 8080；Redis、MySQL 正常；管理员账号 e2eadmin01 已存在
-python scripts\e2e_full_flow.py
+python scripts\e2e_full_flow.py       # 全链路：66 项断言
+python scripts\concurrency_test.py    # 并发：6 组证据（约 90 秒，含 2 次 40 秒等待）
+python scripts\verify_init_sql.py     # init.sql：从零建库 + 幂等 + 与真库结构比对
+python scripts\verify_config.py       # 配置：yml 与示例结构一致 + 敏感信息未入库
 ```
 
 输出示例（结尾）：
@@ -132,14 +135,34 @@ python scripts\e2e_full_flow.py
 | A10 | 商品详情显示下架原因 | `offlineReason` 有值 | 正常 |
 | A11 | 被平台下架后卖家自行 `relist` | `2013`（`WHERE status=0` 天然挡住 3） | 异常 |
 
-## 7. 并发与幂等（独立脚本，详见 `学习计划/CampusMart-1.0-交付计划.md` D11）
+## 7. 并发与一致性
 
-| 组 | 场景 | 预期结果 | 实测 |
+可执行版本：`scripts/concurrency_test.py`（一次跑完，输出汇总表；成功退出码 0）。
+
+```powershell
+python scripts\concurrency_test.py
+```
+
+| 组 | 场景 | 预期结果 | 实测（2026-10-15） |
 |---|---|---|---|
-| C1 | **50 线程抢购同一商品** | 只产生 **1** 单（乐观锁 + CAS） | ✅ 超卖从 10 单降到 1 单 |
-| C2 | **20 线程用同一凭证下单** | 只成功 **1** 次（Redis 撕票原子） | ✅ |
-| C3 | **10 线程评价同一订单** | 只落 **1** 条（唯一约束 `UNIQUE(order_id)`） | ✅ |
-| C4 | 禁用用户 vs 旧 token 并发请求 | 禁用后旧 token **立即** 401（`token_version + 1`） | ✅ |
+| C1 | **50 线程抢购同一商品**（每线程持**各自**凭证，只考商品侧并发） | 恰好 **1** 单 | ✅ 接口成功 1 次 / 库里 1 单；其余 49 个返回 `2003`；商品转 `status=2` |
+| C2 | **20 线程用同一张凭证下单**（考 `delete` 撕票原子性） | 恰好 **1** 次成功 | ✅ 成功 1 次 / 库里 1 单；其余 19 个返回 `2005` |
+| C3 | **10 线程评价同一订单**（考 `UNIQUE(order_id)`） | 恰好 **1** 条 | ✅ 成功 1 次 / 库里 1 条；其余 9 个返回 `2012` |
+| C4a | 超时单无人支付 → 定时任务关闭（证明调度器在工作） | 订单转 `4` 且商品回滚 `1` | ✅ 40 秒内完成 |
+| C4b | **超时关闭 vs 支付竞争** | 结果唯一（`1` 或 `4`）且订单/商品状态自洽 | ✅ 支付赢（订单 `1`、商品保持 `2`）；同窗口另有 3 次支付被 `2007` 拒 |
+| C5 | **禁用用户 vs 旧 token 并发请求** | 禁用后旧 token **立即** 401 | ✅ `token_version` 0→1；并发 65 次请求，禁用后采样 40 次全部 `401` |
+
+> C4 需要等 `@Scheduled(fixedDelay = 30_000)` 扫到（脚本把 `create_time` 改到 16 分钟前，
+> 超过 `TIMEOUT_MINUTES = 15`），所以 C4a / C4b 各最多等 40 秒 —— **不是卡住**。
+
+### 三种「原子」手段的对应关系
+
+| 手段 | 用在哪 | 挡住的是 |
+|---|---|---|
+| 乐观锁 + 状态 CAS（`WHERE status IN (0,1)`） | C1 抢购 | 并发下卖同一件东西（超卖） |
+| Redis `delete` 撕票（一次性凭证） | C2 重复提交 | 同一张票被用多次 |
+| 数据库唯一约束 `UNIQUE(order_id)` | C3 重复评价 | 应用层判断漏掉的并发窗口 |
+| `token_version + 1`（SQL 自增） | C5 禁用用户 | 用户拿着旧 token 继续用 |
 
 ---
 

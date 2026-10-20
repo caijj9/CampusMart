@@ -1,0 +1,80 @@
+{
+  "fixtures": {
+    "run": "mv9ko6yv",
+    "users": [
+      {
+        "id": 43,
+        "username": "qamv9ko6yvs"
+      },
+      {
+        "id": 44,
+        "username": "qamv9ko6yvb"
+      },
+      {
+        "id": 45,
+        "username": "qamv9ko6yvx"
+      }
+    ],
+    "products": [
+      80,
+      81,
+      82
+    ],
+    "orders": [
+      58,
+      59
+    ]
+  },
+  "results": [
+    {
+      "name": "下单后缓存仍为在售",
+      "actual": 1,
+      "expected": 2,
+      "pass": false,
+      "productId": 80,
+      "orderId": 58
+    },
+    {
+      "name": "取消后缓存仍为售出",
+      "actual": 2,
+      "expected": 1,
+      "pass": false,
+      "productId": 81,
+      "orderId": 59
+    },
+    {
+      "name": "并发收藏仅产生一条记录",
+      "actual": 1,
+      "expected": 1,
+      "pass": true,
+      "productId": 82,
+      "codes": [
+        0,
+        2008,
+        2008,
+        2008,
+        2008,
+        2008,
+        2008,
+        2008
+      ]
+    },
+    {
+      "name": "负数分页不能返回全量",
+      "actual": false,
+      "expected": true,
+      "pass": false,
+      "size": -1,
+      "records": 2,
+      "total": 0
+    },
+    {
+      "name": "允许3张各1.8MB图片批量上传",
+      "actual": 400,
+      "expected": 0,
+      "pass": false,
+      "actualCode": 400,
+      "message": "文件太大，单个文件不能超过 2MB"
+    }
+  ]
+}

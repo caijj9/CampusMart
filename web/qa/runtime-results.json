@@ -1,0 +1,378 @@
+{
+  "timestamp": "2026-10-15T13:23:47.337Z",
+  "fixtures": {
+    "run": "mv9kkwqb",
+    "users": [
+      {
+        "id": 40,
+        "username": "qamv9kkwqbs"
+      },
+      {
+        "id": 41,
+        "username": "qamv9kkwqbb"
+      },
+      {
+        "id": 42,
+        "username": "qamv9kkwqbx"
+      }
+    ],
+    "products": [
+      {
+        "id": 78,
+        "title": "QA-mv9kkwqb-cache"
+      },
+      {
+        "id": 79,
+        "title": "QA-mv9kkwqb-bad-category"
+      }
+    ],
+    "orders": [
+      56,
+      57
+    ]
+  },
+  "results": [
+    {
+      "name": "匿名商品搜索被拒绝",
+      "pass": true,
+      "actual": 401,
+      "expected": 401
+    },
+    {
+      "name": "无效JWT被拒绝",
+      "pass": true,
+      "actual": 401,
+      "expected": 401
+    },
+    {
+      "name": "普通用户无管理员查询权限",
+      "pass": true,
+      "actual": 403,
+      "expected": 403
+    },
+    {
+      "name": "普通用户无用户列表权限",
+      "pass": true,
+      "actual": 403,
+      "expected": 403
+    },
+    {
+      "name": "越权修改资料被拒绝",
+      "pass": true,
+      "actual": 403,
+      "expected": 403
+    },
+    {
+      "name": "商品价格0被拒绝",
+      "pass": true,
+      "actual": 400,
+      "expected": 400
+    },
+    {
+      "name": "买家不能编辑他人商品",
+      "pass": true,
+      "actual": 403,
+      "expected": 403
+    },
+    {
+      "name": "买家不能下架他人商品",
+      "pass": true,
+      "actual": 403,
+      "expected": 403
+    },
+    {
+      "name": "浏览量每次请求加1",
+      "pass": true,
+      "actual": 2,
+      "expected": 2
+    },
+    {
+      "name": "历史去重",
+      "pass": true,
+      "actual": 1,
+      "expected": 1
+    },
+    {
+      "name": "首次收藏",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "重复收藏友好错误",
+      "pass": true,
+      "actual": 2008,
+      "expected": 2008
+    },
+    {
+      "name": "他人取消收藏不影响买家",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "买家收藏仍在",
+      "pass": true,
+      "actual": true,
+      "expected": true
+    },
+    {
+      "name": "取消收藏",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "再次收藏",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "不能购买自己的商品",
+      "pass": true,
+      "actual": 2004,
+      "expected": 2004
+    },
+    {
+      "name": "正常下单",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "重复票据不能下单",
+      "pass": true,
+      "actual": 2005,
+      "expected": 2005
+    },
+    {
+      "name": "下单后搜索不再展示商品",
+      "pass": true,
+      "actual": false,
+      "expected": false
+    },
+    {
+      "name": "下单后详情立即已售出",
+      "pass": false,
+      "actual": 1,
+      "expected": 2,
+      "productId": 78,
+      "orderId": 56
+    },
+    {
+      "name": "第三方不能看订单详情",
+      "pass": true,
+      "actual": 403,
+      "expected": 403
+    },
+    {
+      "name": "第三方不能支付",
+      "pass": true,
+      "actual": 403,
+      "expected": 403
+    },
+    {
+      "name": "未付款不能发货",
+      "pass": true,
+      "actual": 2007,
+      "expected": 2007
+    },
+    {
+      "name": "未完成不能评价",
+      "pass": true,
+      "actual": 2011,
+      "expected": 2011
+    },
+    {
+      "name": "订单列表没有手机号",
+      "pass": true,
+      "actual": false,
+      "expected": false
+    },
+    {
+      "name": "买家取消待付款",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "取消后详情恢复在售",
+      "pass": true,
+      "actual": 1,
+      "expected": 1
+    },
+    {
+      "name": "已下架详情状态",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "下架商品不能购买",
+      "pass": true,
+      "actual": 2003,
+      "expected": 2003
+    },
+    {
+      "name": "卖家重新上架",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "买家支付",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "卖家发货",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "发货后不能取消",
+      "pass": true,
+      "actual": 2007,
+      "expected": 2007
+    },
+    {
+      "name": "买家确认收货",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "首次卖家评分为空",
+      "pass": true,
+      "actual": null,
+      "expected": null
+    },
+    {
+      "name": "买家评价成功",
+      "pass": true,
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "重复评价被拒绝",
+      "pass": true,
+      "actual": 2012,
+      "expected": 2012
+    },
+    {
+      "name": "评价列表平均分",
+      "pass": true,
+      "actual": 5,
+      "expected": 5
+    },
+    {
+      "name": "详情卖家评分及时更新",
+      "pass": false,
+      "actual": null,
+      "expected": 5,
+      "sellerId": 40
+    },
+    {
+      "name": "/order/bought拒绝pageSize=0",
+      "pass": false,
+      "actual": 0,
+      "expected": 400,
+      "returnedSize": 0
+    },
+    {
+      "name": "/order/bought拒绝pageSize=-1",
+      "pass": false,
+      "actual": 0,
+      "expected": 400,
+      "returnedSize": -1
+    },
+    {
+      "name": "/order/bought拒绝pageNum=0",
+      "pass": true,
+      "actual": 400,
+      "expected": 400
+    },
+    {
+      "name": "/order/sold拒绝pageSize=0",
+      "pass": false,
+      "actual": 0,
+      "expected": 400,
+      "returnedSize": 0
+    },
+    {
+      "name": "/order/sold拒绝pageSize=-1",
+      "pass": false,
+      "actual": 0,
+      "expected": 400,
+      "returnedSize": -1
+    },
+    {
+      "name": "/order/sold拒绝pageNum=0",
+      "pass": true,
+      "actual": 400,
+      "expected": 400
+    },
+    {
+      "name": "/product/mine拒绝pageSize=0",
+      "pass": false,
+      "actual": 0,
+      "expected": 400,
+      "returnedSize": 0
+    },
+    {
+      "name": "/product/mine拒绝pageSize=-1",
+      "pass": false,
+      "actual": 0,
+      "expected": 400,
+      "returnedSize": -1
+    },
+    {
+      "name": "/product/mine拒绝pageNum=0",
+      "pass": true,
+      "actual": 400,
+      "expected": 400
+    },
+    {
+      "name": "/review/seller/40拒绝pageSize=0",
+      "pass": false,
+      "actual": 0,
+      "expected": 400,
+      "returnedSize": 0
+    },
+    {
+      "name": "/review/seller/40拒绝pageSize=-1",
+      "pass": false,
+      "actual": 0,
+      "expected": 400,
+      "returnedSize": -1
+    },
+    {
+      "name": "/review/seller/40拒绝pageNum=0",
+      "pass": true,
+      "actual": 400,
+      "expected": 400
+    },
+    {
+      "name": "搜索页大小上限",
+      "pass": true,
+      "actual": 50,
+      "expected": 50
+    },
+    {
+      "name": "发布不存在分类被拒绝",
+      "pass": false,
+      "actual": 0,
+      "expected": 2016,
+      "productId": 79
+    },
+    {
+      "name": "超出数据库金额范围应参数报错",
+      "pass": false,
+      "actual": 500,
+      "expected": 400
+    }
+  ]
+}

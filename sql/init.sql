@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS `product`
     `condition_level` TINYINT       NOT NULL DEFAULT 1 COMMENT '成色：1全新 2几乎全新 3轻微使用痕迹 4明显使用痕迹',
     `category_id`     BIGINT        NOT NULL COMMENT '分类ID → category.id',
     `seller_id`       BIGINT        NOT NULL COMMENT '卖家ID → user.id',
-    `status`          TINYINT       NOT NULL DEFAULT 1 COMMENT '状态：1在售 2已售出 0已下架',
+    `status`          TINYINT       NOT NULL DEFAULT 1 COMMENT '状态：1在售 2已售出（下单即锁定，取消回退1） 0卖家下架 3平台下架',
 
     `create_time`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

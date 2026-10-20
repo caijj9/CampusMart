@@ -47,7 +47,7 @@ erDiagram
         decimal  price              "价格（元）"
         tinyint  condition_level    "成色 1全新 2几乎全新 3轻微使用 4明显使用"
         varchar  images             "图片URL，逗号分隔，最多9张"
-        tinyint  status             "状态 1在售 2已售出 0已下架"
+        tinyint  status             "1在售 2已售出 0卖家下架 3平台下架"
         int      version            "乐观锁版本号（并发下单防超卖）"
         varchar  offline_reason     "平台下架原因（管理员填写，仅 status=3 时有值）"
         datetime offline_time       "平台下架时间"

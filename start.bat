@@ -66,6 +66,19 @@ if exist "%MYSQL%" (
 )
 
 REM ---------- 5. run ----------
+REM Port check: if 8080 is already listening, the app is probably already up.
+netstat -ano | findstr ":8080" | findstr "LISTENING" >nul
+if not errorlevel 1 (
+    echo [5/5] port 8080 .......................... ALREADY IN USE
+    echo.
+    echo       Something is already listening on 8080 - likely CampusMart itself.
+    echo       Verify:  http://localhost:8080/hello
+    echo       To restart: stop the old process first, then run this script again.
+    echo.
+    pause
+    exit /b 0
+)
+
 set "MVN=mvn"
 where mvn >nul 2>nul
 if errorlevel 1 (
@@ -76,6 +89,21 @@ echo [5/5] starting Spring Boot at http://localhost:8080 ...
 echo       using:  %MVN%
 echo       first run compiles the project, please wait
 echo.
+
+if not exist "%MVN%" if not "%MVN%"=="mvn" (
+    echo       [ERROR] Maven not found at %MVN%
+    echo       Install Maven or edit the MVN variable at the top of this file.
+    pause
+    exit /b 1
+)
+
 call "%MVN%" spring-boot:run
+
+echo.
+echo ------------------------------------------------------------
+echo   Spring Boot exited (code %ERRORLEVEL%)
+echo   If there is an error above, read it before closing.
+echo ------------------------------------------------------------
+pause
 
 endlocal

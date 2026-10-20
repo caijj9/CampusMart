@@ -5,7 +5,7 @@ import type { ConditionLevel, Product, PublishProductParams } from '@/types/prod
 export const productFormSchema = z.object({
   title: z.string().trim().min(1, '请输入商品标题').max(100, '标题最多 100 个字符'),
   description: z.string(),
-  price: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, '请输入金额，最多保留两位小数')
+  price: z.string().trim().regex(/^\d{1,8}(\.\d{1,2})?$/, '请输入金额，最多 8 位整数、2 位小数')
     .refine((value) => Number.isFinite(Number(value)) && Number(value) >= 0.01, '价格至少为 0.01 元'),
   conditionLevel: z.enum(['1', '2', '3', '4'], { error: '请选择有效成色' }),
   categoryId: z.string().regex(/^[1-9]\d*$/, '请选择分类').refine((value) => Number.isSafeInteger(Number(value)), '请选择有效分类'),

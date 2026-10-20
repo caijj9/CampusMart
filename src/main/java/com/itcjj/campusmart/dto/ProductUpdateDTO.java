@@ -15,6 +15,7 @@ public class ProductUpdateDTO {
     private String description;
     @NotNull(message = "价格不能为空")
     @DecimalMin(value = "0.01", message = "价格必须大于 0")
+    @Digits(integer = 8, fraction = 2, message = "价格不能超过 99999999.99 元，且最多保留 2 位小数")
     private BigDecimal price;
     @NotNull(message = "成色不能为空")
     @Max(value = 4, message = "成色必须在 1 到 4 之间")

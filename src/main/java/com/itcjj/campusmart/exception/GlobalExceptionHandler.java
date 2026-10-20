@@ -4,6 +4,7 @@ import com.itcjj.campusmart.common.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -87,6 +88,14 @@ public class GlobalExceptionHandler {
     public Result<Void> handleUploadSize(MaxUploadSizeExceededException e, HttpServletRequest request) {
         log.warn("上传文件过大 [{}]", request.getRequestURI());
         return Result.error(400, "文件太大，单个文件不能超过 2MB");
+    }
+
+    // 数据库约束不通过：字段超长 / 数值超出列范围 / 唯一索引冲突等
+    // 这类错误本质是「传上来的数据装不进表」，属于调用方问题 → 400，不是 500
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public Result<Void> handleDataIntegrity(DataIntegrityViolationException e, HttpServletRequest request) {
+        log.warn("数据不满足数据库约束 [{}] -> {}", request.getRequestURI(), e.getMostSpecificCause().getMessage());
+        return Result.error(400, "提交的数据不合法，请检查后重试");
     }
 
     // 兜底：真正的意外，用 error + 完整堆栈
